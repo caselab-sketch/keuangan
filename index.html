@@ -1,0 +1,2628 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caselab - Laporan Keuangan & Stok</title>
+    
+    <!-- Menambahkan Favicon agar tidak berlogo dunia -->
+    <link class="rounded-lg" rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'><path fill='%232563eb' d='M288 0H160c-17.7 0-32 14.3-32 32s14.3 32 32 32h16v160.2l-114 202.3C40.6 464.7 67.7 512 112.5 512h223c44.8 0 71.9-47.3 49.5-85.5L272 224.2V64h16c17.7 0 32-14.3 32-32s-14.3-32-32-32z'/></svg>" type="image/svg+xml">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Library SheetJS untuk membaca file Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Supabase JS Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Library jsPDF dan jsPDF-AutoTable untuk Export PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen flex overflow-hidden">
+    <div id="app" class="h-full w-full" v-cloak>
+        
+        <!-- VIEW: LOGIN PAGE -->
+        <div v-if="!isLoggedIn" class="flex items-center justify-center h-full w-full bg-slate-900 relative">
+            <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                <div class="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-blue-600 opacity-20 blur-3xl"></div>
+                <div class="absolute bottom-10 right-10 w-72 h-72 rounded-full bg-purple-600 opacity-20 blur-3xl"></div>
+            </div>
+
+            <div class="bg-white p-8 sm:p-10 rounded-2xl shadow-2xl w-full max-w-md z-10 relative">
+                <div class="text-center mb-8">
+                    <h1 class="text-4xl font-bold tracking-wider text-blue-600 mb-2">
+                        <i class="fas fa-flask mr-2"></i>CASELAB
+                    </h1>
+                    <p class="text-gray-500 font-medium">Sistem Informasi Keuangan & Stok</p>
+                </div>
+                
+                <form @submit.prevent="handleLogin" class="space-y-5">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                        <div class="relative">
+                            <i class="fas fa-user absolute left-3 top-3.5 text-gray-400"></i>
+                            <input type="text" v-model="loginForm.username" required placeholder="Masukkan username" class="w-full border-gray-300 border rounded-lg py-2.5 pl-10 pr-4 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute left-3 top-3.5 text-gray-400"></i>
+                            <input type="password" v-model="loginForm.password" required placeholder="Masukkan password" class="w-full border-gray-300 border rounded-lg py-2.5 pl-10 pr-4 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow">
+                        </div>
+                    </div>
+                    
+                    <div v-if="loginError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center">
+                        <i class="fas fa-exclamation-circle mr-2"></i> Username atau password salah!
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all flex justify-center items-center">
+                        Masuk ke Aplikasi <i class="fas fa-arrow-right ml-2"></i>
+                    </button>
+                </form>
+                <div class="mt-6 text-center text-xs text-gray-400">
+                    &copy; 2026 Caselab Admin Panel
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: MAIN APP -->
+        <div v-else class="flex h-full w-full">
+            <!-- Sidebar -->
+            <aside :class="['bg-slate-900 text-white w-64 flex-shrink-0 transition-transform duration-300 z-20 absolute md:relative h-full flex flex-col', isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
+                <div class="flex items-center justify-between p-5 border-b border-slate-700">
+                    <h1 class="text-2xl font-bold tracking-wider text-blue-400"><i class="fas fa-flask mr-2"></i>CASELAB</h1>
+                    <button @click="isSidebarOpen = false" class="md:hidden text-gray-400 hover:text-white">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <nav class="p-4 space-y-2 mt-4 flex-1 overflow-y-auto">
+                    <a href="#" @click.prevent="changeTab('dashboard')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-chart-pie w-6"></i> Dashboard
+                    </a>
+                    <a href="#" @click.prevent="changeTab('incoming_orders')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'incoming_orders' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-list-check w-6"></i> Pesanan Masuk
+                    </a>
+                    <a href="#" @click.prevent="changeTab('incoming_goods')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'incoming_goods' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-truck-ramp-box w-6"></i> Barang Masuk
+                    </a>
+                    <a href="#" @click.prevent="changeTab('stock')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'stock' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-box w-6"></i> Manajemen Stok
+                    </a>
+                    <a href="#" @click.prevent="changeTab('sales')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'sales' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-shopping-cart w-6"></i> Kasir / Penjualan
+                    </a>
+                    <a href="#" @click.prevent="changeTab('expenses')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'expenses' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-wallet w-6"></i> Pengeluaran
+                    </a>
+                    <a href="#" @click.prevent="changeTab('returns')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'returns' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800']">
+                        <i class="fas fa-undo w-6"></i> Retur Produk
+                    </a>
+                    
+                    <hr class="border-slate-700 my-4">
+                    
+                    <a href="#" @click.prevent="changeTab('settings')" :class="['flex items-center p-3 rounded-lg transition-colors', activeTab === 'settings' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-gray-300']">
+                        <i class="fas fa-cog w-6"></i> Backup & Pengaturan
+                    </a>
+                </nav>
+                <div class="p-4 border-t border-slate-700">
+                    <button @click="handleLogout" class="w-full flex items-center justify-center p-3 rounded-lg text-red-400 hover:bg-slate-800 hover:text-red-300 transition-colors">
+                        <i class="fas fa-sign-out-alt mr-2"></i> Keluar
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="flex-1 flex flex-col h-full w-full overflow-hidden bg-gray-50">
+                <header class="md:hidden bg-white shadow-sm p-4 flex items-center justify-between">
+                    <h1 class="text-xl font-bold text-slate-800">Caselab</h1>
+                    <button @click="isSidebarOpen = true" class="text-slate-600 focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </header>
+
+                <div class="flex-1 overflow-y-auto p-4 md:p-8">
+                    
+                    <!-- VIEWS: DASHBOARD -->
+                    <div v-show="activeTab === 'dashboard'" class="space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <h2 class="text-2xl font-bold text-slate-800">Dashboard Keuangan</h2>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button @click="exportToPDF" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center">
+                                    <i class="fas fa-file-pdf mr-2"></i> Ekspor PDF
+                                </button>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <label class="text-sm font-medium text-gray-600">Periode:</label>
+                                    <select v-model="timeFilter" class="border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm cursor-pointer">
+                                        <option value="all">Semua Waktu</option>
+                                        <option value="daily">Hari Ini</option>
+                                        <option value="weekly">Minggu Ini</option>
+                                        <option value="monthly">Bulan Ini</option>
+                                        <option value="custom">Kustom Tanggal</option>
+                                    </select>
+                                    <div v-if="timeFilter === 'custom'" class="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1 shadow-sm">
+                                        <input type="date" v-model="customStartDate" class="border-0 p-1 text-xs focus:ring-0 focus:outline-none cursor-pointer text-gray-700">
+                                        <span class="text-gray-400 text-xs px-1">s/d</span>
+                                        <input type="date" v-model="customEndDate" class="border-0 p-1 text-xs focus:ring-0 focus:outline-none cursor-pointer text-gray-700">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Grid Utama: 5 Metrik Keuangan Dasar -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+                                <p class="text-sm text-gray-500 font-medium mb-1">Total Pendapatan</p>
+                                <h3 class="text-xl font-bold text-gray-800">{{ formatCurrency(totalRevenue) }}</h3>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500">
+                                <p class="text-sm text-gray-500 font-medium mb-1">Total HPP</p>
+                                <h3 class="text-xl font-bold text-gray-800">{{ formatCurrency(totalHpp) }}</h3>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
+                                <p class="text-sm text-gray-500 font-medium mb-1">Total Pengeluaran</p>
+                                <h3 class="text-xl font-bold text-gray-800">{{ formatCurrency(totalExpenses) }}</h3>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
+                                <p class="text-sm text-gray-500 font-medium mb-1">Total Biaya Retur</p>
+                                <h3 class="text-xl font-bold text-gray-800">{{ formatCurrency(totalReturnCosts) }}</h3>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+                                <p class="text-sm text-gray-500 font-medium mb-1">Laba Bersih</p>
+                                <h3 :class="['text-xl font-bold', netProfit >= 0 ? 'text-blue-600' : 'text-red-600']">
+                                    {{ formatCurrency(netProfit) }}
+                                </h3>
+                            </div>
+                        </div>
+
+                        <!-- Baris Tambahan: Saldo ATM dan Laporan Keluar Masuk Saldo ATM -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Widget Saldo ATM -->
+                            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500 flex flex-col justify-between md:col-span-1">
+                                <div>
+                                    <p class="text-sm text-gray-500 font-medium mb-1">Saldo ATM</p>
+                                    <h3 class="text-xl font-bold text-gray-800">{{ formatCurrency(atmBalance) }}</h3>
+                                    <p class="text-xs text-gray-400 mt-1">Dapat ditambah/dikurangi manual secara mandiri</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2 mt-4">
+                                    <button @click="openAtmModal('add')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all border border-emerald-200">
+                                        <i class="fas fa-plus"></i> Tambah
+                                    </button>
+                                    <button @click="openAtmModal('subtract')" class="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all border border-rose-200">
+                                        <i class="fas fa-minus"></i> Kurangi
+                                    </button>
+                                    <button @click="openAtmModal('set')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all border border-indigo-200 ml-auto">
+                                        <i class="fas fa-cog"></i> Atur Ulang
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Laporan Keluar Masuk Saldo ATM (Revisi: Tambah Kolom Laporan ATM di Dashboard) -->
+                            <div class="bg-white rounded-xl shadow-sm p-6 md:col-span-2 flex flex-col justify-between">
+                                <div>
+                                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                                        <h3 class="text-lg font-bold text-slate-800">Laporan Keluar Masuk Saldo ATM</h3>
+                                        <button v-if="state.atm_logs && state.atm_logs.length > 0" @click="clearAtmLogs" class="text-xs text-red-500 hover:text-red-700 transition-colors">
+                                            <i class="fas fa-trash-alt mr-1"></i> Hapus Riwayat
+                                        </button>
+                                    </div>
+                                    <div class="overflow-y-auto max-h-[120px]">
+                                        <table class="w-full text-left text-sm">
+                                            <thead>
+                                                <tr class="bg-slate-50 text-slate-600">
+                                                    <th class="p-2 rounded-tl-lg text-xs">Tanggal</th>
+                                                    <th class="p-2 text-xs">Tipe</th>
+                                                    <th class="p-2 text-right text-xs">Jumlah</th>
+                                                    <th class="p-2 rounded-tr-lg text-xs">Keterangan</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="log in sortedAtmLogs" :key="log.id" class="border-b hover:bg-gray-50 text-xs">
+                                                    <td class="p-2 text-gray-500 whitespace-nowrap">{{ formatDate(log.date) }}</td>
+                                                    <td class="p-2 whitespace-nowrap">
+                                                        <span :class="['px-2 py-0.5 rounded-full text-[10px] font-bold', 
+                                                            log.type === 'Tambah' ? 'bg-emerald-100 text-emerald-800' : 
+                                                            log.type === 'Kurang' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-800']">
+                                                            {{ log.type }}
+                                                        </span>
+                                                    </td>
+                                                    <td :class="['p-2 text-right font-semibold whitespace-nowrap', 
+                                                        log.type === 'Tambah' ? 'text-emerald-600' : 
+                                                        log.type === 'Kurang' ? 'text-rose-600' : 'text-slate-600']">
+                                                        {{ log.type === 'Kurang' ? '-' : '+' }}{{ formatCurrency(log.amount) }}
+                                                    </td>
+                                                    <td class="p-2 text-gray-600 max-w-[200px] truncate" :title="log.description">{{ log.description }}</td>
+                                                </tr>
+                                                <tr v-if="!state.atm_logs || state.atm_logs.length === 0">
+                                                    <td colspan="4" class="p-4 text-center text-gray-500">Belum ada riwayat transaksi ATM.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                            <div class="bg-white rounded-xl shadow-sm p-6">
+                                <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Penjualan Terakhir</h3>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left text-sm">
+                                        <thead>
+                                            <tr class="bg-gray-50 text-gray-600">
+                                                <th class="p-3 rounded-tl-lg">Tanggal</th>
+                                                <th class="p-3">Info</th>
+                                                <th class="p-3">Total</th>
+                                                <th class="p-3 rounded-tr-lg text-center">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="sale in recentSales" :key="sale.id" class="border-b hover:bg-gray-50">
+                                                <td class="p-3 text-xs text-gray-500">{{ formatDate(sale.date) }}</td>
+                                                <td class="p-3">
+                                                    <div class="font-medium">{{ sale.customerName || 'Pelanggan Umum' }}</div>
+                                                    <div class="text-xs text-gray-400">{{ sale.items ? sale.items.length : 0 }} Item(s)</div>
+                                                </td>
+                                                <td class="p-3 font-semibold text-green-600">{{ formatCurrency(sale.total) }}</td>
+                                                <td class="p-3 text-center">
+                                                    <button @click="deleteSale(sale.id)" class="text-red-500 hover:text-red-700 transition-colors" title="Hapus Penjualan">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <tr v-if="recentSales.length === 0">
+                                                <td colspan="4" class="p-4 text-center text-gray-500">Belum ada transaksi penjualan.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-xl shadow-sm p-6">
+                                <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex justify-between items-center">
+                                    <span>Analisis Penjualan Produk</span>
+                                    <span class="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Berdasarkan Filter</span>
+                                </h3>
+                                <div class="overflow-x-auto max-h-[300px]">
+                                    <table class="w-full text-left text-sm relative">
+                                        <thead class="sticky top-0 bg-white shadow-sm">
+                                            <tr class="bg-blue-50 text-blue-800">
+                                                <th class="p-3 rounded-tl-lg">Nama Produk</th>
+                                                <th class="p-3 text-center">Terjual</th>
+                                                <th class="p-3 text-right rounded-tr-lg">Pendapatan</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(item, index) in productSalesAnalysis" :key="index" class="border-b hover:bg-gray-50">
+                                                <td class="p-3">
+                                                    <div class="font-medium text-gray-800">{{ item.name }}</div>
+                                                    <div class="text-xs text-gray-500">{{ item.brand || 'Tanpa Brand' }}</div>
+                                                </td>
+                                                <td class="p-3 text-center font-bold text-gray-700">
+                                                    <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{{ item.totalQty }} pcs</span>
+                                                </td>
+                                                <td class="p-3 text-right font-semibold text-green-600">
+                                                    {{ formatCurrency(item.totalRevenue) }}
+                                                </td>
+                                            </tr>
+                                            <tr v-if="productSalesAnalysis.length === 0">
+                                                <td colspan="3" class="p-8 text-center text-gray-500">
+                                                    <i class="fas fa-chart-bar text-3xl mb-2 text-gray-300 block"></i>
+                                                    Belum ada data penjualan untuk dianalisis.
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: STATUS PESANAN MASUK -->
+                    <div v-show="activeTab === 'incoming_orders'" class="space-y-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <h2 class="text-2xl font-bold text-slate-800">Status Pesanan Masuk</h2>
+                            <div class="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+                                <div class="flex items-center space-x-2">
+                                    <label class="text-sm font-medium text-gray-600">Filter Status:</label>
+                                    <select v-model="incomingOrderStatusFilter" class="border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm cursor-pointer outline-none">
+                                        <option value="all">Semua Status</option>
+                                        <option value="Cetak">Cetak</option>
+                                        <option value="Belum Diorder">Belum Diorder</option>
+                                        <option value="Dalam Orderan">Dalam Orderan</option>
+                                        <option value="Dikirim">Dikirim</option>
+                                    </select>
+                                </div>
+                                <button @click="openIncomingOrderModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm text-sm">
+                                    <i class="fas fa-plus mr-1"></i> Tambah Pesanan
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100 text-gray-700">
+                                            <th class="p-4">Tanggal</th>
+                                            <th class="p-4">Nama Produk</th>
+                                            <th class="p-4">Stok Saat Ini</th>
+                                            <th class="p-4">Status Pesanan</th>
+                                            <th class="p-4 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="order in sortedIncomingOrders" :key="order.id" class="border-b hover:bg-gray-50">
+                                            <td class="p-4">{{ formatDate(order.date) }}</td>
+                                            <td class="p-4 font-medium text-gray-900">{{ order.productName }}</td>
+                                            <td class="p-4">
+                                                <span :class="['px-2.5 py-1 rounded-full text-xs font-semibold', getProductStockByName(order.productName) > 5 ? 'bg-green-100 text-green-700' : (getProductStockByName(order.productName) > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700')]">
+                                                    {{ getProductStockByName(order.productName) }} Pcs
+                                                </span>
+                                            </td>
+                                            <td class="p-4">
+                                                <select @change="updateIncomingOrderStatus(order.id, $event.target.value)" :value="order.status" class="border rounded-lg p-1.5 text-xs font-semibold cursor-pointer outline-none shadow-sm transition-all"
+                                                        :class="[
+                                                            order.status === 'Cetak' ? 'bg-orange-100 text-orange-700 border-orange-300' : '',
+                                                            order.status === 'Belum Diorder' ? 'bg-red-100 text-red-700' : '',
+                                                            order.status === 'Dalam Orderan' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : '',
+                                                            order.status === 'Dikirim' ? 'bg-green-100 text-green-700' : ''
+                                                        ]">
+                                                    <option value="Cetak">Cetak</option>
+                                                    <option value="Belum Diorder">Belum Diorder</option>
+                                                    <option value="Dalam Orderan">Dalam Orderan</option>
+                                                    <option value="Dikirim">Dikirim</option>
+                                                </select>
+                                            </td>
+                                            <td class="p-4 text-center">
+                                                <button @click="deleteIncomingOrder(order.id)" class="text-red-500 hover:text-red-700 transition-colors p-2" title="Hapus Pesanan">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="sortedIncomingOrders.length === 0">
+                                            <td colspan="5" class="p-8 text-center text-gray-500">Belum ada catatan pesanan masuk atau filter tidak cocok.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: BARANG MASUK -->
+                    <div v-show="activeTab === 'incoming_goods'" class="space-y-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <h2 class="text-2xl font-bold text-slate-800">Barang Masuk</h2>
+                            <div class="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+                                <div class="flex items-center space-x-2">
+                                    <label class="text-sm font-medium text-gray-600">Filter Status:</label>
+                                    <select v-model="incomingGoodsStatusFilter" class="border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm cursor-pointer outline-none">
+                                        <option value="all">Semua Status</option>
+                                        <option value="Dalam Pengiriman">Dalam Pengiriman</option>
+                                        <option value="Sampai">Sampai</option>
+                                    </select>
+                                </div>
+                                <button @click="openIncomingGoodsModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm text-sm">
+                                    <i class="fas fa-plus mr-1"></i> Catat Barang Masuk
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100 text-gray-700">
+                                            <th class="p-4">Tanggal</th>
+                                            <th class="p-4">Nama Produk</th>
+                                            <th class="p-4">Brand</th>
+                                            <th class="p-4 text-center">Jumlah (Qty)</th>
+                                            <th class="p-4">Status</th>
+                                            <th class="p-4 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="goods in sortedIncomingGoods" :key="goods.id" class="border-b hover:bg-gray-50">
+                                            <td class="p-4">{{ formatDate(goods.date) }}</td>
+                                            <td class="p-4 font-medium text-gray-900">{{ goods.productName }}</td>
+                                            <td class="p-4">
+                                                <span class="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs font-medium border border-slate-200">
+                                                    {{ goods.brand || 'Tanpa Brand' }}
+                                                </span>
+                                            </td>
+                                            <td class="p-4 text-center font-medium text-blue-600">{{ goods.qty || 1 }} Pcs</td>
+                                            <td class="p-4">
+                                                <select @change="updateIncomingGoodsStatus(goods.id, $event.target.value)" :value="goods.status" class="border rounded-lg p-1.5 text-xs font-semibold cursor-pointer outline-none shadow-sm transition-all"
+                                                        :class="[
+                                                            goods.status === 'Dalam Pengiriman' ? 'bg-yellow-100 text-yellow-700' : '',
+                                                            goods.status === 'Sampai' ? 'bg-green-100 text-green-700' : ''
+                                                        ]">
+                                                    <option value="Dalam Pengiriman">Dalam Pengiriman</option>
+                                                    <option value="Sampai">Sampai</option>
+                                                </select>
+                                            </td>
+                                            <td class="p-4 text-center">
+                                                <button @click="deleteIncomingGoods(goods.id)" class="text-red-500 hover:text-red-700 transition-colors p-2" title="Hapus Barang Masuk">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="sortedIncomingGoods.length === 0">
+                                            <td colspan="6" class="p-8 text-center text-gray-500">Belum ada catatan barang masuk atau filter tidak cocok.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: MANAJEMEN STOK -->
+                    <div v-show="activeTab === 'stock'" class="space-y-6">
+                        <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                            <h2 class="text-2xl font-bold text-slate-800">Manajemen Stok</h2>
+                            <div class="flex flex-wrap gap-2">
+                                <input type="file" ref="excelFileInput" @change="handleExcelImport" accept=".xlsx, .xls, .csv" class="hidden">
+                                <button @click="triggerExcelImport" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center">
+                                    <i class="fas fa-file-excel mr-2"></i> Import Excel
+                                </button>
+                                
+                                <button @click="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center">
+                                    <i class="fas fa-plus mr-2"></i> Tambah Manual
+                                </button>
+                            </div>
+                        </div>
+
+                        <details class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                            <summary class="font-medium cursor-pointer flex items-center select-none">
+                                <i class="fas fa-info-circle mr-2"></i> Panduan Import Excel
+                            </summary>
+                            <div class="mt-2 pl-6 text-gray-700">
+                                Pastikan file Excel/CSV Anda memiliki kolom baris pertama (header) dengan nama: 
+                                <strong class="text-blue-900">Nama Produk</strong>, <strong class="text-blue-900">Brand</strong>, and <strong class="text-blue-900">Stok</strong>. 
+                                Jika nama produk sudah ada, sistem akan otomatis menimpa (update) jumlah stoknya.
+                            </div>
+                        </details>
+
+                        <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Cari Produk</label>
+                                <div class="relative">
+                                    <input type="text" v-model="stockSearch" placeholder="Cari nama atau brand..." class="w-full border-gray-300 border rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Filter Brand</label>
+                                <select v-model="stockBrandFilter" class="w-full border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Filter Jumlah Stok</label>
+                                <select v-model="stockQtyFilter" class="w-full border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    <option value="all">Semua Jumlah Stok</option>
+                                    <option value="empty">Stok Habis (0 Pcs)</option>
+                                    <option value="low">Stok Menipis (1 - 5 Pcs)</option>
+                                    <option value="available">Stok Tersedia (> 5 Pcs)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100 text-gray-700">
+                                            <th class="p-4">Nama Produk</th>
+                                            <th class="p-4">Brand</th>
+                                            <th class="p-4">Stok Tersedia</th>
+                                            <th class="p-4 text-right">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="product in filteredProducts" :key="product.id" class="border-b hover:bg-gray-50">
+                                            <td class="p-4 font-medium text-gray-900">{{ product.name }}</td>
+                                            <td class="p-4">
+                                                <span class="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs font-medium border border-slate-200">
+                                                    {{ product.brand || 'Tanpa Brand' }}
+                                                </span>
+                                            </td>
+                                            <td class="p-4">
+                                                <span :class="['px-2 py-1 rounded-full text-xs font-semibold', product.stock > 5 ? 'bg-green-100 text-green-700' : (product.stock > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700')]">
+                                                    {{ product.stock }} Pcs
+                                                </span>
+                                            </td>
+                                            <td class="p-4 text-right whitespace-nowrap">
+                                                <button @click="openProductModal(product)" class="text-blue-500 hover:text-blue-700 mr-3 transition-colors px-2 py-1 rounded hover:bg-blue-50">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <button @click="deleteProduct(product.id)" class="text-red-500 hover:text-red-700 transition-colors px-2 py-1 rounded hover:bg-red-50">
+                                                    <i class="fas fa-trash"></i> Hapus
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="filteredProducts.length === 0">
+                                            <td colspan="4" class="p-8 text-center text-gray-500">
+                                                Produk tidak ditemukan atau tidak memenuhi kriteria filter.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: KASIR / PENJUALAN -->
+                    <div v-show="activeTab === 'sales'" class="space-y-6">
+                        <h2 class="text-2xl font-bold text-slate-800">Kasir / Penjualan Baru</h2>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm h-fit">
+                                <h3 class="text-lg font-semibold mb-4 border-b pb-2">Pilih Produk</h3>
+                                <form @submit.prevent="addToCart" class="space-y-4">
+                                    <div class="relative" id="sales-search-container">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Produk</label>
+                                        <div class="relative">
+                                            <input type="text" 
+                                                   v-model="salesSearchQuery" 
+                                                   @focus="showSalesDropdown = true" 
+                                                   placeholder="Ketik nama atau brand produk..." 
+                                                   class="w-full border-gray-300 border rounded-lg p-2.5 pr-10 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50">
+                                            
+                                            <button v-if="cartForm.productId" type="button" @click="clearSalesSelection" class="absolute right-8 top-3 text-gray-400 hover:text-gray-600">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                            
+                                            <button type="button" @click="showSalesDropdown = !showSalesDropdown" class="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600">
+                                                <i class="fas" :class="showSalesDropdown ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div v-show="showSalesDropdown" class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                            <div v-for="p in filteredSalesProducts" 
+                                                 :key="p.id" 
+                                                 @click="selectSalesProduct(p)" 
+                                                 class="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center text-sm"
+                                                 :class="p.stock === 0 ? 'opacity-50 pointer-events-none bg-gray-50' : ''">
+                                                <div>
+                                                    <p class="font-semibold text-gray-800">{{ p.name }}</p>
+                                                    <p class="text-xs text-gray-500 mt-0.5">
+                                                        <i class="fas fa-tag mr-1"></i>{{ p.brand || 'Tanpa Brand' }}
+                                                    </p>
+                                                </div>
+                                                <span :class="['text-xs px-2 py-1 rounded font-medium', p.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+                                                    Stok: {{ p.stock }}
+                                                </span>
+                                            </div>
+                                            <div v-if="filteredSalesProducts.length === 0" class="p-4 text-center text-gray-400 text-sm">
+                                                Produk tidak ditemukan.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Jumlah</label>
+                                        <input type="number" v-model.number="cartForm.qty" min="1" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Harga Pokok Produksi (HPP) Satuan</label>
+                                        <div class="relative">
+                                            <span class="absolute left-3 top-2 text-gray-500">Rp</span>
+                                            <input type="number" v-model.number="cartForm.hpp" min="0" required class="w-full border-gray-300 border rounded-lg p-2 pl-10 focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Harga Jual Satuan</label>
+                                        <div class="relative">
+                                            <span class="absolute left-3 top-2 text-gray-500">Rp</span>
+                                            <input type="number" v-model.number="cartForm.price" min="0" required class="w-full border-gray-300 border rounded-lg p-2 pl-10 focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2.5 rounded-lg transition-colors">
+                                        Tambah ke Keranjang
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm flex flex-col">
+                                <h3 class="text-lg font-semibold mb-4 border-b pb-2">Keranjang Belanja</h3>
+                                <div class="flex-1 overflow-y-auto min-h-[200px]">
+                                    <table class="w-full text-left text-sm">
+                                        <thead>
+                                            <tr class="text-gray-500 border-b">
+                                                <th class="pb-2">Produk</th>
+                                                <th class="pb-2 text-center">Qty</th>
+                                                <th class="pb-2 text-right">Harga</th>
+                                                <th class="pb-2 text-right">Subtotal</th>
+                                                <th class="pb-2 text-center">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(item, index) in state.cart" :key="index" class="border-b">
+                                                <td class="py-3">
+                                                    <div class="font-medium text-gray-800">{{ item.name }}</div>
+                                                    <div class="text-xs text-gray-400 mt-0.5">Brand: {{ item.brand || 'Tanpa Brand' }}</div>
+                                                </td>
+                                                <td class="py-3 text-center">{{ item.qty }}</td>
+                                                <td class="py-3 text-right">{{ formatCurrency(item.price) }}</td>
+                                                <td class="py-3 text-right font-medium">{{ formatCurrency(item.subtotal) }}</td>
+                                                <td class="py-3 text-center">
+                                                    <button @click="removeFromCart(index)" class="text-red-500 hover:text-red-700 p-1"><i class="fas fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                            <tr v-if="state.cart.length === 0">
+                                                <td colspan="5" class="py-8 text-center text-gray-400">Keranjang masih kosong</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-4 pt-4 border-t">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Customer (Opsional)</label>
+                                            <input type="text" v-model="checkoutForm.customerName" placeholder="Masukkan nama..." class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Nomor Resi (Opsional)</label>
+                                            <input type="text" v-model="checkoutForm.resi" placeholder="Masukkan resi..." class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-center mb-4 p-4 bg-gray-50 rounded-lg">
+                                        <span class="text-lg font-bold text-gray-700">Total Pembayaran:</span>
+                                        <span class="text-2xl font-bold text-green-600">{{ formatCurrency(cartTotal) }}</span>
+                                    </div>
+                                    <button @click="processCheckout" :disabled="state.cart.length === 0" :class="['w-full py-3 rounded-lg font-bold text-white transition-colors', state.cart.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 shadow-md']">
+                                        Selesaikan Transaksi
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: PENGELUARAN -->
+                    <div v-show="activeTab === 'expenses'" class="space-y-6">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-2xl font-bold text-slate-800">Catatan Pengeluaran</h2>
+                            <button @click="openExpenseModal()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                                <i class="fas fa-plus mr-1"></i> Tambah Pengeluaran
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100 text-gray-700">
+                                            <th class="p-4">Tanggal</th>
+                                            <th class="p-4">Keterangan</th>
+                                            <th class="p-4 text-right">Nominal</th>
+                                            <th class="p-4 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="exp in sortedExpenses" :key="exp.id" class="border-b hover:bg-gray-50">
+                                            <td class="p-4">{{ formatDate(exp.date) }}</td>
+                                            <td class="p-4">{{ exp.description }}</td>
+                                            <td class="p-4 text-right font-medium text-red-600">{{ formatCurrency(exp.amount) }}</td>
+                                            <td class="p-4 text-center">
+                                                <button @click="deleteExpense(exp.id)" class="text-red-500 hover:text-red-700 transition-colors" title="Hapus Pengeluaran">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="state.expenses.length === 0">
+                                            <td colspan="4" class="p-8 text-center text-gray-500">Belum ada data pengeluaran tercatat.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: RETUR -->
+                    <div v-show="activeTab === 'returns'" class="space-y-6">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-2xl font-bold text-slate-800">Manajemen Retur</h2>
+                            <button @click="openReturnModal()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                                <i class="fas fa-undo mr-1"></i> Catat Retur Baru
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100 text-gray-700">
+                                            <th class="p-4">Tanggal</th>
+                                            <th class="p-4">Customer & Resi</th>
+                                            <th class="p-4">Produk & Jumlah</th>
+                                            <th class="p-4 text-right">Biaya Retur</th>
+                                            <th class="p-4 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="ret in sortedReturns" :key="ret.id" class="border-b hover:bg-gray-50">
+                                            <td class="p-4">{{ formatDate(ret.date) }}</td>
+                                            <td class="p-4">
+                                                <div class="font-medium">{{ ret.customerName }}</div>
+                                                <div class="text-xs text-gray-500">Resi: {{ ret.resi }}</div>
+                                            </td>
+                                            <td class="p-4">
+                                                <template v-if="ret.items && ret.items.length > 0">
+                                                    <div v-for="(item, idx) in ret.items" :key="idx" class="flex items-center gap-2 mb-1">
+                                                        <span>{{ getProductName(item.productId) }}</span>
+                                                        <span class="bg-gray-200 px-2 py-0.5 rounded text-xs">{{ item.qty }} pcs</span>
+                                                    </div>
+                                                </template>
+                                            </td>
+                                            <td class="p-4 text-right font-medium text-orange-600">{{ formatCurrency(ret.returnCost) }}</td>
+                                            <td class="p-4 text-center">
+                                                <button @click="deleteReturn(ret.id)" class="text-red-500 hover:text-red-700 transition-colors" title="Hapus Retur">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="state.returns.length === 0">
+                                            <td colspan="5" class="p-8 text-center text-gray-500">Belum ada data retur.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEWS: SETTINGS & BACKUP -->
+                    <div v-show="activeTab === 'settings'" class="space-y-6">
+                        <h2 class="text-2xl font-bold text-slate-800">Backup & Pengaturan Data</h2>
+                        <p class="text-gray-600">Simpan dan amankan data riwayat transaksi Anda secara cloud via Supabase database.</p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+                            <!-- Download File -->
+                            <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-green-500">
+                                <h3 class="text-lg font-bold mb-2">Download File Backup</h3>
+                                <p class="text-sm text-gray-600 mb-6">Mengunduh semua data saat ini ke dalam memori perangkat Anda sebagai file berekstensi .json.</p>
+                                <button @click="downloadData" class="w-full bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center">
+                                    <i class="fas fa-download mr-2"></i> Download (.json)
+                                </button>
+                            </div>
+
+                            <!-- Import Data Backup -->
+                            <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-blue-500">
+                                <h3 class="text-lg font-bold mb-2">Import File Backup</h3>
+                                <p class="text-sm text-gray-600 mb-6">Mengembalikan data dari file .json yang sebelumnya telah diunduh.</p>
+                                <input type="file" ref="backupFileInput" @change="handleBackupImport" accept=".json" class="hidden">
+                                <button @click="triggerBackupImport" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center">
+                                    <i class="fas fa-upload mr-2"></i> Import (.json)
+                                </button>
+                            </div>
+
+                            <!-- Reset Data -->
+                            <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-red-500">
+                                <h3 class="text-lg font-bold mb-2 text-red-600">Reset Aplikasi</h3>
+                                <p class="text-sm text-gray-600 mb-6">Menghapus seluruh data secara permanen di database Supabase. <span class="font-bold text-red-500">Tindakan ini tidak dapat dibatalkan!</span></p>
+                                <button @click="confirmReset" class="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center">
+                                    <i class="fas fa-trash-alt mr-2"></i> Hapus Semua Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+
+        <!-- MODALS -->
+
+        <!-- Modal Pesanan Masuk Baru (REVISI: Cari & Pilih Produk berbasis Dropdown) -->
+        <div v-if="modals.incoming_order.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+                <h3 class="text-xl font-bold mb-4">Tambah Pesanan Masuk Baru</h3>
+                <form @submit.prevent="saveIncomingOrder">
+                    <div class="space-y-4">
+                        <div class="relative" id="incoming-order-search-container">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Produk (Cari & Pilih)</label>
+                            <div class="relative">
+                                <input type="text" 
+                                       v-model="modals.incoming_order.data.productName" 
+                                       @focus="showIncomingOrderDropdown = true" 
+                                       required 
+                                       placeholder="Cari nama atau brand produk..." 
+                                       class="w-full border-gray-300 border rounded-lg p-2.5 pr-10 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50">
+                                
+                                <button v-if="modals.incoming_order.data.productName" type="button" @click="modals.incoming_order.data.productName = ''" class="absolute right-8 top-3 text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                
+                                <button type="button" @click="showIncomingOrderDropdown = !showIncomingOrderDropdown" class="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600">
+                                    <i class="fas" :class="showIncomingOrderDropdown ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                </button>
+                            </div>
+                            
+                            <div v-show="showIncomingOrderDropdown" class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                <div v-for="p in filteredIncomingOrderProducts" 
+                                     :key="p.id" 
+                                     @click="selectIncomingOrderProduct(p)" 
+                                     class="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center text-sm">
+                                    <div>
+                                        <p class="font-semibold text-gray-800">{{ p.name }}</p>
+                                        <p class="text-xs text-gray-500 mt-0.5">
+                                            <i class="fas fa-tag mr-1"></i>{{ p.brand || 'Tanpa Brand' }}
+                                        </p>
+                                    </div>
+                                    <span :class="['text-xs px-2 py-1 rounded font-medium', p.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+                                        Stok: {{ p.stock }}
+                                    </span>
+                                </div>
+                                <div v-if="filteredIncomingOrderProducts.length === 0" class="p-4 text-center text-gray-400 text-sm">
+                                    Produk tidak ditemukan.
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Status Awal</label>
+                            <select v-model="modals.incoming_order.data.status" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                <option value="Cetak">Cetak</option>
+                                <option value="Belum Diorder">Belum Diorder</option>
+                                <option value="Dalam Orderan">Dalam Orderan</option>
+                                <option value="Dikirim">Dikirim</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.incoming_order.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Barang Masuk Baru (REVISI: Cari & Pilih Produk berbasis Dropdown) -->
+        <div v-if="modals.incoming_goods.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+                <h3 class="text-xl font-bold mb-4">Catat Barang Masuk</h3>
+                <form @submit.prevent="saveIncomingGoods">
+                    <div class="space-y-4">
+                        <div class="relative" id="incoming-goods-search-container">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Produk (Cari & Pilih)</label>
+                            <div class="relative">
+                                <input type="text" 
+                                       v-model="modals.incoming_goods.data.productName" 
+                                       @focus="showIncomingGoodsDropdown = true" 
+                                       required 
+                                       placeholder="Cari nama atau brand produk..." 
+                                       class="w-full border-gray-300 border rounded-lg p-2.5 pr-10 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50">
+                                
+                                <button v-if="modals.incoming_goods.data.productName" type="button" @click="modals.incoming_goods.data.productName = ''" class="absolute right-8 top-3 text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                
+                                <button type="button" @click="showIncomingGoodsDropdown = !showIncomingGoodsDropdown" class="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600">
+                                    <i class="fas" :class="showIncomingGoodsDropdown ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                </button>
+                            </div>
+                            
+                            <div v-show="showIncomingGoodsDropdown" class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                <div v-for="p in filteredIncomingGoodsProducts" 
+                                     :key="p.id" 
+                                     @click="selectIncomingGoodsProduct(p)" 
+                                     class="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center text-sm">
+                                    <div>
+                                        <p class="font-semibold text-gray-800">{{ p.name }}</p>
+                                        <p class="text-xs text-gray-500 mt-0.5">
+                                            <i class="fas fa-tag mr-1"></i>{{ p.brand || 'Tanpa Brand' }}
+                                        </p>
+                                    </div>
+                                    <span :class="['text-xs px-2 py-1 rounded font-medium', p.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+                                        Stok: {{ p.stock }}
+                                    </span>
+                                </div>
+                                <div v-if="filteredIncomingGoodsProducts.length === 0" class="p-4 text-center text-gray-400 text-sm">
+                                    Produk tidak ditemukan.
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Brand / Merek</label>
+                            <input type="text" v-model="modals.incoming_goods.data.brand" placeholder="Contoh: Caselab, Spigen" class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Jumlah (Qty) Masuk</label>
+                            <input type="number" v-model.number="modals.incoming_goods.data.qty" min="1" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Status Awal</label>
+                            <select v-model="modals.incoming_goods.data.status" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                <option value="Dalam Pengiriman">Dalam Pengiriman</option>
+                                <option value="Sampai">Sampai</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.incoming_goods.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Produk -->
+        <div v-if="modals.product.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+                <h3 class="text-xl font-bold mb-4">{{ modals.product.isEdit ? 'Edit Produk' : 'Tambah Produk' }}</h3>
+                <form @submit.prevent="saveProduct">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Produk</label>
+                            <input type="text" v-model="modals.product.data.name" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Brand / Merek</label>
+                            <input type="text" v-model="modals.product.data.brand" placeholder="Contoh: Caselab, Samsung, Apple" class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Jumlah Stok</label>
+                            <input type="number" v-model.number="modals.product.data.stock" min="0" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.product.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Pengeluaran -->
+        <div v-if="modals.expense.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+                <h3 class="text-xl font-bold mb-4">Catat Pengeluaran Baru</h3>
+                <form @submit.prevent="saveExpense">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan / Tujuan</label>
+                            <input type="text" v-model="modals.expense.data.description" placeholder="Contoh: Lakban & Kardus Packing" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nominal (Rp)</label>
+                            <input type="number" v-model.number="modals.expense.data.amount" min="1" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.expense.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Simpan Pengeluaran</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Retur -->
+        <div v-if="modals.return.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl my-8">
+                <h3 class="text-xl font-bold mb-4">Form Retur Produk</h3>
+                <form @submit.prevent="saveReturn">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Customer</label>
+                                <input type="text" v-model="modals.return.data.customerName" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Nomor Resi</label>
+                                <input type="text" v-model="modals.return.data.resi" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        
+                        <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-sm font-medium text-gray-700">Daftar Produk Diretur</label>
+                                <button type="button" @click="addReturnItem" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">
+                                    + Tambah Produk
+                                </button>
+                            </div>
+                            
+                            <div v-for="(item, index) in modals.return.data.items" 
+                                 :key="index" 
+                                 :id="'return-item-container-' + index" 
+                                 class="relative flex gap-2 mb-3 items-end border-b pb-2 last:border-b-0 last:pb-0">
+                                
+                                <div class="flex-1 relative">
+                                    <label class="block text-xs text-gray-500 mb-1">Cari Produk</label>
+                                    <input type="text" 
+                                           v-model="item.searchQuery" 
+                                           @focus="item.showDropdown = true" 
+                                           placeholder="Ketik produk..." 
+                                           class="w-full border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    
+                                    <div v-show="item.showDropdown" class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                                        <div v-for="p in getFilteredReturnProducts(item.searchQuery)" 
+                                             :key="p.id" 
+                                             @click="selectReturnProduct(item, p)" 
+                                             class="p-2.5 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-0 text-xs flex justify-between">
+                                            <span class="font-semibold text-gray-800">{{ p.name }}</span>
+                                            <span class="text-gray-500 italic">({{ p.brand || 'No Brand' }})</span>
+                                        </div>
+                                        <div v-if="getFilteredReturnProducts(item.searchQuery).length === 0" class="p-3 text-center text-gray-400 text-xs">
+                                            Produk tidak ditemukan.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="w-16">
+                                    <label class="block text-xs text-gray-500 mb-1">Qty</label>
+                                    <input type="number" v-model.number="item.qty" min="1" required class="w-full border-gray-300 border rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                </div>
+                                
+                                <button type="button" v-if="modals.return.data.items.length > 1" @click="removeReturnItem(index)" class="text-red-500 hover:text-red-700 p-2 border border-transparent mb-1">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Biaya Retur (Rp)</label>
+                            <p class="text-xs text-gray-500 mb-1">Biaya ongkir balik atau kompensasi yang dikeluarkan toko.</p>
+                            <input type="number" v-model.number="modals.return.data.returnCost" min="0" required class="w-full border-gray-300 border rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="flex items-center mt-2">
+                            <input type="checkbox" id="addStockBack" v-model="modals.return.data.addStockBack" class="rounded text-blue-600 w-4 h-4 mr-2">
+                            <label for="addStockBack" class="text-sm text-gray-700">Kembalikan produk ke stok?</label>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.return.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">Proses Retur</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Atur / Tambah / Kurangi Saldo ATM (REVISI: Ditambahkan Kolom Keterangan seperti diminta) -->
+        <div v-if="modals.atm.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
+                <h3 class="text-xl font-bold mb-4">
+                    <span v-if="modals.atm.mode === 'add'"><i class="fas fa-plus-circle text-emerald-600 mr-2"></i>Tambah Saldo ATM</span>
+                    <span v-else-if="modals.atm.mode === 'subtract'"><i class="fas fa-minus-circle text-rose-600 mr-2"></i>Kurangi Saldo ATM</span>
+                    <span v-else><i class="fas fa-cog text-indigo-600 mr-2"></i>Atur Ulang Saldo ATM</span>
+                </h3>
+                <form @submit.prevent="saveAtmBalance">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                <span v-if="modals.atm.mode === 'add'">Nominal Tambahan (Rp)</span>
+                                <span v-else-if="modals.atm.mode === 'subtract'">Nominal Pengurangan (Rp)</span>
+                                <span v-else>Nominal Saldo Baru (Rp)</span>
+                            </label>
+                            <input type="number" v-model.number="modals.atm.data.balance" min="0" required class="w-full border-gray-300 border rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        </div>
+                        
+                        <!-- Kolom Keterangan / Catatan Transaksi ATM (Revisi) -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan / Catatan</label>
+                            <input type="text" v-model="modals.atm.data.description" :required="modals.atm.mode !== 'set'" placeholder="Contoh: Setor tunai hasil penjualan / Bayar supplier" class="w-full border-gray-300 border rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        </div>
+
+                        <div v-if="modals.atm.mode !== 'set'" class="bg-slate-50 p-3 rounded-lg border text-xs text-gray-500">
+                            Saldo ATM Saat Ini: <strong class="text-slate-800 font-semibold">{{ formatCurrency(atmBalance) }}</strong>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" @click="modals.atm.show = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                        <button type="submit" class="px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors"
+                                :class="[
+                                    modals.atm.mode === 'add' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md' : '',
+                                    modals.atm.mode === 'subtract' ? 'bg-rose-600 hover:bg-rose-700 shadow-md' : '',
+                                    modals.atm.mode === 'set' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-md' : ''
+                                ]">
+                            Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Custom Confirmation Dialog -->
+        <div v-if="confirmModal.show" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl border border-gray-100">
+                <div class="flex items-center space-x-3 text-blue-600 mb-3">
+                    <i class="fas fa-exclamation-circle text-2xl"></i>
+                    <h3 class="text-lg font-bold text-gray-900">{{ confirmModal.title }}</h3>
+                </div>
+                <p class="text-sm text-gray-600 mb-6">{{ confirmModal.message }}</p>
+                <div class="flex justify-end space-x-3">
+                    <button @click="confirmModal.show = false" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Batal</button>
+                    <button @click="confirmModal.onConfirm" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm">Lanjutkan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toasts -->
+        <div class="fixed bottom-4 right-4 z-50 space-y-2">
+            <transition-group name="fade">
+                <div v-for="toast in toasts" :key="toast.id" :class="['px-4 py-3 rounded-lg shadow-lg flex items-center min-w-[250px]', toast.type === 'error' ? 'bg-red-600 text-white' : (toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-gray-800 text-white')]">
+                    <i :class="['fas mr-3', toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle']"></i>
+                    <span class="text-sm font-medium">{{ toast.msg }}</span>
+                </div>
+            </transition-group>
+        </div>
+        
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+        // Inisialisasi Supabase Client menggunakan API key Anda
+        const supabaseUrl = 'https://byaxblhdvpubedtbnhsm.supabase.co';
+        const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5YXhibGhkdnB1YmVkdGJuaHNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MTU2NzIsImV4cCI6MjA5ODQ5MTY3Mn0.EcK7-UrKTEI0AbzoiZdShvWhOYza-ohXJTMr_mEhbCU";
+        
+        // PERBAIKAN UTAMA: Menggunakan inisialisasi yang tepat via Supabase Global Object dari browser CDN
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        createApp({
+            setup() {
+                // UI State
+                const activeTab = ref('dashboard');
+                const isSidebarOpen = ref(false);
+                const toasts = ref([]);
+                const fileInput = ref(null);
+                const backupFileInput = ref(null);
+                
+                // === LOGIKA LOGIN ADMIN (MENGGUNAKAN PENYIMPANAN LOKAL SEBAGAI PENYIMPANAN SESI) ===
+                const isLoggedIn = ref(localStorage.getItem('caselab_logged_in') === 'true');
+                const loginError = ref(false);
+                const loginForm = reactive({ username: '', password: '' });
+
+                // Fungsi pembantu untuk menyimpan setting ke Supabase (menggantikan localStorage)
+                const saveSettingToSupabase = async (key, value) => {
+                    try {
+                        const { data, error } = await supabaseClient.from('settings').select('*').eq('key', key);
+                        if (!error && data && data.length > 0) {
+                            await supabaseClient.from('settings').update({ value: String(value) }).eq('key', key);
+                        } else {
+                            await supabaseClient.from('settings').insert([{ key: key, value: String(value) }]);
+                        }
+                    } catch (e) {
+                        console.error(`Gagal menyimpan setting ${key}:`, e);
+                    }
+                };
+
+                const handleLogin = async () => {
+                    if (loginForm.username === 'caselab' && loginForm.password === 'admin123') {
+                        isLoggedIn.value = true;
+                        loginError.value = false;
+                        loginForm.username = '';
+                        loginForm.password = '';
+                        localStorage.setItem('caselab_logged_in', 'true');
+                        showToast('Berhasil login sebagai Admin');
+                    } else {
+                        loginError.value = true;
+                    }
+                };
+
+                const handleLogout = async () => {
+                    isLoggedIn.value = false;
+                    localStorage.removeItem('caselab_logged_in');
+                    showToast('Berhasil keluar');
+                };
+                
+                // Pencarian & Filter Stok
+                const stockSearch = ref('');
+                const stockBrandFilter = ref('Semua Brand');
+                const stockQtyFilter = ref('all');
+
+                // Kasir Pencarian State
+                const salesSearchQuery = ref('');
+                const showSalesDropdown = ref(false);
+
+                // REVISI: State untuk modal dropdown pencarian Barang Masuk & Pesanan Masuk
+                const showIncomingOrderDropdown = ref(false);
+                const showIncomingGoodsDropdown = ref(false);
+
+                // REVISI: State untuk filter status list view
+                const incomingOrderStatusFilter = ref('all');
+                const incomingGoodsStatusFilter = ref('all');
+
+                // REVISI: State Filter Kustom Tanggal Periode
+                const customStartDate = ref('');
+                const customEndDate = ref('');
+
+                // REVISI: State Saldo ATM Mandiri (Diinisialisasi 0, lalu dimuat secara asinkron dari Supabase)
+                const atmBalance = ref(0);
+
+                // Dialog Konfirmasi Kustom
+                const confirmModal = reactive({
+                    show: false,
+                    title: 'Konfirmasi',
+                    message: '',
+                    onConfirm: null
+                });
+
+                const triggerConfirm = (title, message, callback) => {
+                    confirmModal.title = title;
+                    confirmModal.message = message;
+                    confirmModal.onConfirm = () => {
+                        callback();
+                        confirmModal.show = false;
+                    };
+                    confirmModal.show = true;
+                };
+
+                // Data State
+                const state = reactive({
+                    products: [],
+                    sales: [],
+                    expenses: [],
+                    returns: [],
+                    cart: [],
+                    incoming_orders: [],
+                    incoming_goods: [],
+                    isIncomingGoodsModalOpen: false,
+                    newIncomingGoods: { productName: '', brand: '', qty: 1 },
+                    atm_logs: [] // REVISI: Menyimpan logs keluar-masuk saldo ATM
+                });
+
+                // Memuat konfigurasi aplikasi (Sesi login & Saldo ATM) dari Supabase
+                const loadSettingsFromSupabase = async () => {
+                    try {
+                        const { data, error } = await supabaseClient.from('settings').select('*');
+                        if (!error && data) {
+                            const atmRecord = data.find(item => item.key === 'atm_balance');
+                            if (atmRecord) {
+                                atmBalance.value = parseFloat(atmRecord.value) || 0;
+                            }
+                            // Memuat logs keluar masuk ATM dari Supabase (Revisi)
+                            const atmLogsRecord = data.find(item => item.key === 'atm_logs');
+                            if (atmLogsRecord) {
+                                try {
+                                    state.atm_logs = JSON.parse(atmLogsRecord.value) || [];
+                                } catch (err) {
+                                    state.atm_logs = [];
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Gagal load setting dari database Supabase", e);
+                    }
+                };
+
+                // Fungsi Sinkronisasi Utama dari Supabase Server
+                const loadAllDataFromSupabase = async () => {
+                    try {
+                        // Ambil Produk
+                        const { data: productsData, error: pError } = await supabaseClient.from('products').select('*');
+                        if (!pError && productsData) state.products = productsData;
+
+                        // Ambil Penjualan
+                        const { data: salesData, error: sError } = await supabaseClient.from('sales').select('*');
+                        if (!sError && salesData) state.sales = salesData;
+
+                        // Ambil Pengeluaran
+                        const { data: expensesData, error: eError } = await supabaseClient.from('expenses').select('*');
+                        if (!eError && expensesData) state.expenses = expensesData;
+
+                        // Ambil Retur
+                        const { data: returnsData, error: rError } = await supabaseClient.from('returns').select('*');
+                        if (!rError && returnsData) state.returns = returnsData;
+
+                        // Ambil Pesanan Masuk dengan Penanganan Normalisasi Skema Kolom (Snake Case / Camel Case)
+                        const { data: incOrdersData, error: ioError } = await supabaseClient.from('incoming_orders').select('*');
+                        if (!ioError && incOrdersData) {
+                            state.incoming_orders = incOrdersData.map(o => ({
+                                id: o.id,
+                                date: o.date || o.created_at,
+                                productName: o.productName || o.product_name || '',
+                                status: o.status || ''
+                            }));
+                        } else {
+                            state.incoming_orders = [];
+                        }
+
+                        // Ambil Barang Masuk dengan Penanganan Normalisasi Skema Kolom (Snake Case / Camel Case)
+                        const { data: incGoodsData, error: igError } = await supabaseClient.from('incoming_goods').select('*');
+                        if (!igError && incGoodsData) {
+                            state.incoming_goods = incGoodsData.map(g => ({
+                                id: g.id,
+                                date: g.date || g.created_at,
+                                productName: g.productName || g.product_name || '',
+                                brand: g.brand || '',
+                                qty: g.qty || 1,
+                                status: g.status || '',
+                                stock_added: g.stock_added !== undefined ? g.stock_added : (g.stockAdded !== undefined ? g.stockAdded : false)
+                            }));
+                        } else {
+                            state.incoming_goods = [];
+                        }
+
+                    } catch (e) {
+                        console.error("Gagal sinkronisasi data dari server Supabase", e);
+                    }
+                };
+
+                onMounted(async () => {
+                    // Muat settings terlebih dahulu dari Supabase secara asinkron
+                    await loadSettingsFromSupabase();
+
+                    // Muat data langsung dari database Supabase saat aplikasi dibuka
+                    loadAllDataFromSupabase();
+
+                    document.addEventListener('click', (e) => {
+                        const salesContainer = document.getElementById('sales-search-container');
+                        if (salesContainer && !salesContainer.contains(e.target)) {
+                            showSalesDropdown.value = false;
+                        }
+
+                        // REVISI: Tutup dropdown Barang Masuk & Pesanan Masuk jika diklik di luar area input
+                        const incomingOrderContainer = document.getElementById('incoming-order-search-container');
+                        if (incomingOrderContainer && !incomingOrderContainer.contains(e.target)) {
+                            showIncomingOrderDropdown.value = false;
+                        }
+
+                        const incomingGoodsContainer = document.getElementById('incoming-goods-search-container');
+                        if (incomingGoodsContainer && !incomingGoodsContainer.contains(e.target)) {
+                            showIncomingGoodsDropdown.value = false;
+                        }
+
+                        if (modals.return && modals.return.data && modals.return.data.items) {
+                            modals.return.data.items.forEach((item, index) => {
+                                const returnContainer = document.getElementById(`return-item-container-${index}`);
+                                if (returnContainer && !returnContainer.contains(e.target)) {
+                                    item.showDropdown = false;
+                                }
+                            });
+                        }
+                    });
+                });
+
+                // Utility / Notification
+                const showToast = (msg, type = 'success') => {
+                    const id = Date.now();
+                    toasts.value.push({ id, msg, type });
+                    setTimeout(() => {
+                        toasts.value = toasts.value.filter(t => t.id !== id);
+                    }, 3000);
+                };
+
+                const formatCurrency = (val) => {
+                    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val);
+                };
+
+                const formatDate = (dateStr) => {
+                    return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+                };
+
+                const changeTab = (tab) => {
+                    activeTab.value = tab;
+                    isSidebarOpen.value = false;
+                };
+
+                const timeFilter = ref('all');
+                
+                const isDateInFilter = (dateString, filterType) => {
+                    if (filterType === 'all') return true;
+                    const d = new Date(dateString);
+                    const now = new Date();
+                    
+                    if (filterType === 'daily') {
+                        return d.toDateString() === now.toDateString();
+                    }
+                    if (filterType === 'weekly') {
+                        const currentDay = now.getDay();
+                        const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+                        const startOfWeek = new Date(now);
+                        startOfWeek.setDate(now.getDate() - distanceToMonday);
+                        startOfWeek.setHours(0, 0, 0, 0);
+                        return d >= startOfWeek;
+                    }
+                    if (filterType === 'monthly') {
+                        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                    }
+                    if (filterType === 'custom') {
+                        const checkDate = new Date(dateString);
+                        if (customStartDate.value) {
+                            const start = new Date(customStartDate.value);
+                            start.setHours(0, 0, 0, 0);
+                            if (checkDate < start) return false;
+                        }
+                        if (customEndDate.value) {
+                            const end = new Date(customEndDate.value);
+                            end.setHours(23, 59, 59, 999);
+                            if (checkDate > end) return false;
+                        }
+                        return true;
+                    }
+                    return true;
+                };
+
+                const filteredSales = computed(() => state.sales.filter(s => isDateInFilter(s.date, timeFilter.value)));
+                const filteredExpenses = computed(() => state.expenses.filter(e => isDateInFilter(e.date, timeFilter.value)));
+                const filteredReturns = computed(() => state.returns.filter(r => isDateInFilter(r.date, timeFilter.value)));
+                
+                const brands = computed(() => {
+                    const list = state.products
+                        .map(p => p.brand ? p.brand.trim() : 'Tanpa Brand')
+                        .filter(Boolean);
+                    return ['Semua Brand', ...new Set(list)];
+                });
+
+                const filteredProducts = computed(() => {
+                    return state.products.filter(p => {
+                        const q = stockSearch.value.toLowerCase();
+                        const brandText = (p.brand || 'tanpa brand').toLowerCase();
+                        const matchesSearch = p.name.toLowerCase().includes(q) || brandText.includes(q);
+
+                        const currentBrand = p.brand || 'Tanpa Brand';
+                        const matchesBrand = stockBrandFilter.value === 'Semua Brand' || currentBrand === stockBrandFilter.value;
+
+                        let matchesQty = true;
+                        if (stockQtyFilter.value === 'empty') {
+                            matchesQty = p.stock === 0;
+                        } else if (stockQtyFilter.value === 'low') {
+                            matchesQty = p.stock > 0 && p.stock <= 5;
+                        } else if (stockQtyFilter.value === 'available') {
+                            matchesQty = p.stock > 5;
+                        }
+
+                        return matchesSearch && matchesBrand && matchesQty;
+                    });
+                });
+
+                const totalRevenue = computed(() => filteredSales.value.reduce((sum, sale) => sum + sale.total, 0));
+                const totalExpenses = computed(() => filteredExpenses.value.reduce((sum, exp) => sum + exp.amount, 0));
+                const totalHpp = computed(() => filteredSales.value.reduce((sum, sale) => {
+                    const saleHpp = sale.items ? sale.items.reduce((itemSum, item) => itemSum + (item.subtotalHpp || 0), 0) : 0;
+                    return sum + saleHpp;
+                }, 0));
+                const totalReturnCosts = computed(() => filteredReturns.value.reduce((sum, ret) => sum + ret.returnCost, 0));
+                const netProfit = computed(() => totalRevenue.value - totalHpp.value - totalExpenses.value - totalReturnCosts.value);
+                const recentSales = computed(() => [...filteredSales.value].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5));
+                const sortedExpenses = computed(() => [...state.expenses].sort((a, b) => new Date(b.date) - new Date(a.date)));
+                const sortedReturns = computed(() => [...state.returns].sort((a, b) => new Date(b.date) - new Date(a.date)));
+
+                // Getters khusus untuk Stok Realtime di tabel pesanan masuk
+                const getProductStockByName = (productName) => {
+                    if (!productName) return 0;
+                    const p = state.products.find(p => p.name.toLowerCase().trim() === productName.toLowerCase().trim());
+                    return p ? p.stock : 0;
+                };
+
+                const getProductName = (id) => {
+                    const p = state.products.find(p => p.id === id);
+                    return p ? p.name : 'Produk Dihapus / Tidak Diketahui';
+                };
+
+                const productSalesAnalysis = computed(() => {
+                    const analysis = {};
+                    filteredSales.value.forEach(sale => {
+                        if(sale.items && sale.items.length > 0) {
+                            sale.items.forEach(item => {
+                                if (!analysis[item.productId]) {
+                                    analysis[item.productId] = {
+                                        id: item.productId,
+                                        name: item.name || getProductName(item.productId),
+                                        brand: item.brand || '',
+                                        totalQty: 0,
+                                        totalRevenue: 0
+                                    };
+                                }
+                                analysis[item.productId].totalQty += item.qty;
+                                analysis[item.productId].totalRevenue += item.subtotal;
+                            });
+                        }
+                    });
+                    return Object.values(analysis).sort((a, b) => b.totalQty - a.totalQty);
+                });
+
+                // === EXPORT PDF FUNCTION ===
+                const exportToPDF = () => {
+                    try {
+                        const { jsPDF } = window.jspdf;
+                        const doc = new jsPDF('p', 'mm', 'a4');
+                        
+                        // Header Styling
+                        doc.setFillColor(15, 23, 42); // slate-900
+                        doc.rect(0, 0, 210, 40, 'F');
+                        
+                        doc.setTextColor(255, 255, 255);
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(22);
+                        doc.text("CASELAB LAPORAN KEUANGAN", 15, 18);
+                        
+                        doc.setFont("Helvetica", "normal");
+                        doc.setFontSize(10);
+                        doc.setTextColor(156, 163, 175);
+                        let periodeText = "Semua Waktu";
+                        if (timeFilter.value === 'daily') periodeText = "Hari Ini";
+                        if (timeFilter.value === 'weekly') periodeText = "Minggu Ini";
+                        if (timeFilter.value === 'monthly') periodeText = "Bulan Ini";
+                        if (timeFilter.value === 'custom') {
+                            periodeText = `Kustom (${customStartDate.value || 'Awal'} s/d ${customEndDate.value || 'Akhir'})`;
+                        }
+                        
+                        doc.text(`Periode Laporan: ${periodeText} (Diekspor pada: ${new Date().toLocaleString('id-ID')})`, 15, 26);
+                        doc.text("Sistem Informasi Keuangan & Stok Caselab", 15, 32);
+
+                        // 1. RINGKASAN KEUANGAN
+                        doc.setTextColor(15, 23, 42);
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("I. Ringkasan Keuangan", 15, 52);
+
+                        // Grid ringkasan keuangan (Menyertakan Saldo ATM)
+                        const summaryHeaders = [["Parameter", "Total Nilai"]];
+                        const summaryData = [
+                            ["Total Pendapatan", formatCurrency(totalRevenue.value)],
+                            ["Total HPP", formatCurrency(totalHpp.value)],
+                            ["Total Pengeluaran", formatCurrency(totalExpenses.value)],
+                            ["Total Biaya Retur", formatCurrency(totalReturnCosts.value)],
+                            ["Laba Bersih", formatCurrency(netProfit.value)],
+                            ["Saldo ATM Saat Ini", formatCurrency(atmBalance.value)]
+                        ];
+
+                        doc.autoTable({
+                            startY: 56,
+                            head: summaryHeaders,
+                            body: summaryData,
+                            theme: 'striped',
+                            headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+                            styles: { fontSize: 10, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 100 },
+                                1: { cellWidth: 80, halign: 'right', fontStyle: 'bold' }
+                            },
+                            didParseCell: function (data) {
+                                if (data.section === 'body' && data.row.index === 4) {
+                                    // Highlight Laba Bersih
+                                    data.cell.styles.fillColor = netProfit.value >= 0 ? [220, 252, 231] : [254, 226, 226];
+                                    data.cell.styles.textColor = netProfit.value >= 0 ? [21, 128, 61] : [185, 28, 28];
+                                } else if (data.section === 'body' && data.row.index === 5) {
+                                    // Highlight Saldo ATM
+                                    data.cell.styles.fillColor = [224, 231, 255]; // indigo-100
+                                    data.cell.styles.textColor = [67, 56, 202];  // indigo-700
+                                }
+                            }
+                        });
+
+                        let currentY = doc.lastAutoTable.finalY + 12;
+
+                        // 2. LAPORAN KELUAR MASUK SALDO ATM
+                        if (currentY > 240) {
+                            doc.addPage();
+                            currentY = 20;
+                        }
+
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("II. Laporan Keluar Masuk Saldo ATM", 15, currentY);
+
+                        const atmHeaders = [["Tanggal", "Tipe", "Jumlah", "Keterangan"]];
+                        const atmData = sortedAtmLogs.value.map(log => [
+                            formatDate(log.date),
+                            log.type,
+                            (log.type === 'Kurang' ? '-' : '+') + formatCurrency(log.amount),
+                            log.description
+                        ]);
+
+                        if (atmData.length === 0) {
+                            atmData.push(["Belum ada riwayat transaksi ATM", "", "", ""]);
+                        }
+
+                        doc.autoTable({
+                            startY: currentY + 4,
+                            head: atmHeaders,
+                            body: atmData,
+                            theme: 'striped',
+                            headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] }, // Indigo-600
+                            styles: { fontSize: 9, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 40 },
+                                1: { cellWidth: 25, halign: 'center' },
+                                2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
+                                3: { cellWidth: 80 }
+                            },
+                            didParseCell: function (data) {
+                                if (data.section === 'body') {
+                                    const rowType = data.row.raw[1]; // Mengambil log.type
+                                    if (data.column.index === 2) { // Kolom Jumlah
+                                        if (rowType === 'Tambah') {
+                                            data.cell.styles.textColor = [21, 128, 61]; // Emerald-700 (Hijau)
+                                        } else if (rowType === 'Kurang') {
+                                            data.cell.styles.textColor = [185, 28, 28]; // Rose-700 (Merah)
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        currentY = doc.lastAutoTable.finalY + 12;
+
+                        // Cek apakah halaman berikutnya dibutuhkan sebelum menulis bab baru
+                        if (currentY > 240) {
+                            doc.addPage();
+                            currentY = 20;
+                        }
+
+                        // 3. ANALISIS PENJUALAN PRODUK
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("III. Analisis Penjualan Produk", 15, currentY);
+
+                        const productHeaders = [["Nama Produk", "Brand", "Jumlah Terjual", "Total Pendapatan"]];
+                        const productData = productSalesAnalysis.value.map(item => [
+                            item.name,
+                            item.brand || 'Tanpa Brand',
+                            `${item.totalQty} pcs`,
+                            formatCurrency(item.totalRevenue)
+                        ]);
+
+                        if (productData.length === 0) {
+                            productData.push([ "Belum ada data penjualan", "", "", "" ]);
+                        }
+
+                        doc.autoTable({
+                            startY: currentY + 4,
+                            head: productHeaders,
+                            body: productData,
+                            theme: 'grid',
+                            headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+                            styles: { fontSize: 9, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 70 },
+                                1: { cellWidth: 40 },
+                                2: { cellWidth: 35, halign: 'center' },
+                                3: { cellWidth: 35, halign: 'right' }
+                            }
+                        });
+
+                        currentY = doc.lastAutoTable.finalY + 12;
+
+                        // Cek apakah halaman berikutnya dibutuhkan sebelum menulis bab baru
+                        if (currentY > 240) {
+                            doc.addPage();
+                            currentY = 20;
+                        }
+
+                        // 4. RIWAYAT PENJUALAN TERAKHIR
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("IV. Riwayat Penjualan Terakhir", 15, currentY);
+
+                        const salesHeaders = [["Tanggal", "Pelanggan", "Jumlah Item", "Total Transaksi"]];
+                        const salesData = recentSales.value.map(sale => [
+                            formatDate(sale.date),
+                            sale.customerName || 'Pelanggan Umum',
+                            `${sale.items ? sale.items.length : 0} Item(s)`,
+                            formatCurrency(sale.total)
+                        ]);
+
+                        if (salesData.length === 0) {
+                            salesData.push([ "Belum ada transaksi penjualan", "", "", "" ]);
+                        }
+
+                        doc.autoTable({
+                            startY: currentY + 4,
+                            head: salesHeaders,
+                            body: salesData,
+                            theme: 'striped',
+                            headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255] },
+                            styles: { fontSize: 9, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 45 },
+                                1: { cellWidth: 65 },
+                                2: { cellWidth: 35, halign: 'center' },
+                                3: { cellWidth: 35, halign: 'right' }
+                            }
+                        });
+
+                        currentY = doc.lastAutoTable.finalY + 12;
+
+                        // Cek halaman baru
+                        if (currentY > 240) {
+                            doc.addPage();
+                            currentY = 20;
+                        }
+
+                        // 5. DAFTAR PENGELUARAN
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("V. Daftar Pengeluaran", 15, currentY);
+
+                        const expenseHeaders = [["Tanggal", "Keterangan / Tujuan", "Nominal Pengeluaran"]];
+                        const expenseData = filteredExpenses.value.map(exp => [
+                            formatDate(exp.date),
+                            exp.description,
+                            formatCurrency(exp.amount)
+                        ]);
+
+                        if (expenseData.length === 0) {
+                            expenseData.push([ "Belum ada data pengeluaran", "", "" ]);
+                        }
+
+                        doc.autoTable({
+                            startY: currentY + 4,
+                            head: expenseHeaders,
+                            body: expenseData,
+                            theme: 'striped',
+                            headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255] },
+                            styles: { fontSize: 9, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 45 },
+                                1: { cellWidth: 95 },
+                                2: { cellWidth: 40, halign: 'right' }
+                            }
+                        });
+
+                        currentY = doc.lastAutoTable.finalY + 12;
+
+                        // Cek halaman baru
+                        if (currentY > 240) {
+                            doc.addPage();
+                            currentY = 20;
+                        }
+
+                        // 6. MANAJEMEN RETUR PRODUK
+                        doc.setFont("Helvetica", "bold");
+                        doc.setFontSize(14);
+                        doc.text("VI. Riwayat Retur Produk", 15, currentY);
+
+                        const returnHeaders = [["Tanggal", "Pelanggan & Resi", "Detail Produk Diretur", "Biaya Retur"]];
+                        const returnData = filteredReturns.value.map(ret => {
+                            let itemDetails = "";
+                            if (ret.items && ret.items.length > 0) {
+                                itemDetails = ret.items.map(item => `${getProductName(item.productId)} (${item.qty} pcs)`).join("\n");
+                            }
+                            return [
+                                formatDate(ret.date),
+                                `${ret.customerName}\nResi: ${ret.resi}`,
+                                itemDetails,
+                                formatCurrency(ret.returnCost)
+                            ];
+                        });
+
+                        if (returnData.length === 0) {
+                            returnData.push([ "Belum ada data retur produk", "", "", "" ]);
+                        }
+
+                        doc.autoTable({
+                            startY: currentY + 4,
+                            head: returnHeaders,
+                            body: returnData,
+                            theme: 'grid',
+                            headStyles: { fillColor: [249, 115, 22], textColor: [255, 255, 255] },
+                            styles: { fontSize: 9, cellPadding: 3 },
+                            columnStyles: {
+                                0: { cellWidth: 40 },
+                                1: { cellWidth: 50 },
+                                2: { cellWidth: 55 },
+                                3: { cellWidth: 35, halign: 'right' }
+                            }
+                        });
+
+                        // Footer Halaman Penanda Buku
+                        const pageCount = doc.internal.getNumberOfPages();
+                        for (let i = 1; i <= pageCount; i++) {
+                            doc.setPage(i);
+                            doc.setFontSize(8);
+                            doc.setTextColor(156, 163, 175);
+                            doc.text(`Halaman ${i} dari ${pageCount}`, 105, 290, { align: 'center' });
+                        }
+
+                        doc.save(`Caselab_Laporan_Keuangan_${periodeText}_${new Date().toISOString().slice(0, 10)}.pdf`);
+                        showToast('Laporan PDF berhasil diunduh!');
+                    } catch (error) {
+                        console.error("Gagal melakukan ekspor PDF:", error);
+                        showToast('Gagal memproses ekspor PDF', 'error');
+                    }
+                };
+
+                const excelFileInput = ref(null);
+                const triggerExcelImport = () => { if (excelFileInput.value) excelFileInput.value.click(); };
+
+                const handleExcelImport = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                            
+                            for (const row of json) {
+                                const normalizedRow = {};
+                                for (const key in row) {
+                                    normalizedRow[key.toString().toLowerCase().trim()] = row[key];
+                                }
+
+                                const name = normalizedRow['nama produk'] || normalizedRow['nama'] || normalizedRow['name'] || normalizedRow['produk'];
+                                const brand = normalizedRow['brand'] || normalizedRow['merek'] || normalizedRow['merk'] || '';
+                                const stockRaw = normalizedRow['stok'] || normalizedRow['stock'] || normalizedRow['jumlah'];
+                                const stock = parseInt(stockRaw) || 0;
+
+                                if (name && typeof name === 'string' && name.trim() !== '') {
+                                    const trimmedName = name.trim();
+                                    const existingProduct = state.products.find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
+                                    
+                                    if (existingProduct) {
+                                        existingProduct.stock = stock;
+                                        if (brand) existingProduct.brand = brand.toString().trim();
+                                        await supabaseClient.from('products').update({ stock: stock, brand: existingProduct.brand }).eq('id', existingProduct.id);
+                                    } else {
+                                        const newProduct = {
+                                            id: 'PRD-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+                                            name: trimmedName,
+                                            brand: brand ? brand.toString().trim() : '',
+                                            stock: stock
+                                        };
+                                        state.products.push(newProduct);
+                                        await supabaseClient.from('products').insert([newProduct]);
+                                    }
+                                }
+                            }
+                            showToast('Proses import excel selesai dan tersinkronisasi');
+                        } catch (error) {
+                            console.error(error);
+                            showToast('Gagal memproses file. Pastikan formatnya benar.', 'error');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsArrayBuffer(file);
+                };
+
+                const modals = reactive({
+                    product: { show: false, isEdit: false, data: { id: '', name: '', brand: '', stock: 0 } },
+                    expense: { show: false, data: { description: '', amount: 0 } },
+                    return: { show: false, data: { customerName: '', resi: '', items: [{ productId: '', searchQuery: '', showDropdown: false, qty: 1 }], returnCost: 0, addStockBack: true } },
+                    incoming_order: { show: false, data: { productName: '', status: 'Cetak' } },
+                    incoming_goods: { show: false, data: { productName: '', brand: '', qty: 1, status: 'Dalam Pengiriman' } },
+                    // REVISI: Data modal saldo ATM ditambah input description
+                    atm: { show: false, mode: 'set', data: { balance: 0, description: '' } }
+                });
+
+                const checkoutForm = reactive({ customerName: '', resi: '' });
+
+                const openProductModal = (product = null) => {
+                    if (product) {
+                        modals.product.isEdit = true;
+                        modals.product.data = { id: product.id, name: product.name, brand: product.brand || '', stock: product.stock };
+                    } else {
+                        modals.product.isEdit = false;
+                        modals.product.data = { id: '', name: '', brand: '', stock: 0 };
+                    }
+                    modals.product.show = true;
+                };
+
+                const saveProduct = async () => {
+                    const prodObj = {
+                        id: modals.product.data.id || 'PRD-' + Date.now(),
+                        name: modals.product.data.name,
+                        brand: modals.product.data.brand || '',
+                        stock: modals.product.data.stock
+                    };
+
+                    if (modals.product.isEdit) {
+                        const index = state.products.findIndex(p => p.id === prodObj.id);
+                        if(index !== -1) state.products[index] = prodObj;
+                        await supabaseClient.from('products').update({ name: prodObj.name, brand: prodObj.brand, stock: prodObj.stock }).eq('id', prodObj.id);
+                        showToast('Produk berhasil diperbarui');
+                    } else {
+                        state.products.push(prodObj);
+                        await supabaseClient.from('products').insert([prodObj]);
+                        showToast('Produk berhasil ditambahkan');
+                    }
+                    modals.product.show = false;
+                };
+
+                const deleteProduct = (id) => {
+                    triggerConfirm('Hapus Produk', 'Apakah Anda yakin ingin menghapus produk ini?', async () => {
+                        state.products = state.products.filter(p => p.id !== id);
+                        await supabaseClient.from('products').delete().eq('id', id);
+                        showToast('Produk berhasil dihapus');
+                    });
+                };
+
+                const deleteSale = (id) => {
+                    triggerConfirm('Hapus Penjualan', 'Yakin ingin menghapus riwayat penjualan ini? Stok produk akan dikembalikan secara otomatis.', async () => {
+                        const sale = state.sales.find(s => s.id === id);
+                        if (sale) {
+                            for (const item of sale.items) {
+                                const product = state.products.find(p => p.id === item.productId);
+                                if (product) {
+                                    product.stock += item.qty;
+                                    await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                                }
+                            }
+                            state.sales = state.sales.filter(s => s.id !== id);
+                            await supabaseClient.from('sales').delete().eq('id', id);
+                            showToast('Riwayat penjualan berhasil dihapus.');
+                        }
+                    });
+                };
+
+                // Expense Actions
+                const openExpenseModal = () => {
+                    modals.expense.data = { description: '', amount: 0 };
+                    modals.expense.show = true;
+                };
+
+                const saveExpense = async () => {
+                    const newExpense = {
+                        id: 'EXP-' + Date.now(),
+                        date: new Date().toISOString(),
+                        description: modals.expense.data.description,
+                        amount: modals.expense.data.amount
+                    };
+                    state.expenses.push(newExpense);
+                    await supabaseClient.from('expenses').insert([newExpense]);
+                    showToast('Pengeluaran berhasil dicatat');
+                    modals.expense.show = false;
+                };
+
+                const deleteExpense = (id) => {
+                    triggerConfirm('Hapus Pengeluaran', 'Yakin ingin menghapus catatan pengeluaran ini?', async () => {
+                        state.expenses = state.expenses.filter(e => e.id !== id);
+                        await supabaseClient.from('expenses').delete().eq('id', id);
+                        showToast('Pengeluaran berhasil dihapus');
+                    });
+                };
+
+                // Cart / Kasir Logic
+                const cartForm = reactive({ productId: '', qty: 1, price: 0, hpp: 0 });
+
+                const filteredSalesProducts = computed(() => {
+                    const query = salesSearchQuery.value.toLowerCase();
+                    if (!query) return state.products;
+                    return state.products.filter(p => 
+                        p.name.toLowerCase().includes(query) || 
+                        (p.brand && p.brand.toLowerCase().includes(query))
+                    );
+                });
+
+                const selectSalesProduct = (p) => {
+                    cartForm.productId = p.id;
+                    salesSearchQuery.value = `${p.name} (${p.brand || 'Tanpa Brand'})`;
+                    showSalesDropdown.value = false;
+                };
+
+                const clearSalesSelection = () => {
+                    cartForm.productId = '';
+                    salesSearchQuery.value = '';
+                };
+
+                const cartTotal = computed(() => state.cart.reduce((sum, item) => sum + item.subtotal, 0));
+
+                const addToCart = () => {
+                    const product = state.products.find(p => p.id === cartForm.productId);
+                    if (!product) {
+                        showToast('Silakan cari dan pilih produk terlebih dahulu!', 'error');
+                        return;
+                    }
+                    const existingCartItemQty = state.cart.filter(item => item.productId === product.id).reduce((s, i) => s + i.qty, 0);
+                    if (existingCartItemQty + cartForm.qty > product.stock) {
+                        showToast(`Stok tidak mencukupi! Sisa stok: ${product.stock - existingCartItemQty}`, 'error');
+                        return;
+                    }
+
+                    state.cart.push({
+                        productId: product.id,
+                        name: product.name,
+                        brand: product.brand || '',
+                        qty: cartForm.qty,
+                        price: cartForm.price,
+                        hpp: cartForm.hpp,
+                        subtotal: cartForm.qty * cartForm.price,
+                        subtotalHpp: cartForm.qty * cartForm.hpp
+                    });
+                    
+                    cartForm.productId = '';
+                    salesSearchQuery.value = '';
+                    cartForm.qty = 1;
+                    cartForm.price = 0;
+                    cartForm.hpp = 0;
+                    showToast('Ditambahkan ke keranjang');
+                };
+
+                const removeFromCart = (index) => { state.cart.splice(index, 1); };
+
+                const processCheckout = async () => {
+                    if (state.cart.length === 0) return;
+
+                    const newSale = {
+                        id: 'INV-' + Date.now(),
+                        date: new Date().toISOString(),
+                        customerName: checkoutForm.customerName,
+                        resi: checkoutForm.resi,
+                        items: [...state.cart],
+                        total: cartTotal.value
+                    };
+
+                    state.sales.push(newSale);
+                    await supabaseClient.from('sales').insert([newSale]);
+
+                    for (const item of state.cart) {
+                        const product = state.products.find(p => p.id === item.productId);
+                        if (product) {
+                            product.stock -= item.qty;
+                            await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                        }
+                    }
+
+                    state.cart = [];
+                    checkoutForm.customerName = '';
+                    checkoutForm.resi = '';
+                    
+                    showToast('Transaksi berhasil disimpan ke Cloud!');
+                    changeTab('dashboard');
+                };
+
+                // Return Actions
+                const openReturnModal = () => {
+                    modals.return.data = { customerName: '', resi: '', items: [{ productId: '', searchQuery: '', showDropdown: false, qty: 1 }], returnCost: 0, addStockBack: true };
+                    modals.return.show = true;
+                };
+
+                const getFilteredReturnProducts = (searchQuery) => {
+                    const query = (searchQuery || '').toLowerCase();
+                    if (!query) return state.products;
+                    return state.products.filter(p => p.name.toLowerCase().includes(query) || (p.brand && p.brand.toLowerCase().includes(query)));
+                };
+
+                const selectReturnProduct = (item, p) => {
+                    item.productId = p.id;
+                    item.searchQuery = `${p.name} (${p.brand || 'Tanpa Brand'})`;
+                    item.showDropdown = false;
+                };
+
+                const addReturnItem = () => modals.return.data.items.push({ productId: '', searchQuery: '', showDropdown: false, qty: 1 });
+                const removeReturnItem = (index) => modals.return.data.items.splice(index, 1);
+
+                const saveReturn = async () => {
+                    const validItems = modals.return.data.items.filter(item => item.productId !== '');
+                    if (validItems.length === 0) {
+                        showToast('Pilih minimal 1 produk valid untuk diretur!', 'error');
+                        return;
+                    }
+
+                    const returnItems = validItems.map(item => ({ productId: item.productId, qty: item.qty }));
+                    const newReturn = {
+                        id: 'RET-' + Date.now(),
+                        date: new Date().toISOString(),
+                        customerName: modals.return.data.customerName,
+                        resi: modals.return.data.resi,
+                        items: returnItems,
+                        returnCost: modals.return.data.returnCost,
+                        addedStockBack: modals.return.data.addStockBack
+                    };
+
+                    state.returns.push(newReturn);
+                    await supabaseClient.from('returns').insert([newReturn]);
+
+                    if (modals.return.data.addStockBack) {
+                        for (const item of returnItems) {
+                            const product = state.products.find(p => p.id === item.productId);
+                            if (product) {
+                                product.stock += item.qty;
+                                await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                            }
+                        }
+                    }
+
+                    showToast('Retur berhasil dicatat');
+                    modals.return.show = false;
+                };
+
+                const deleteReturn = (id) => {
+                    triggerConfirm('Hapus Retur', 'Yakin ingin menghapus data retur ini?', async () => {
+                        const ret = state.returns.find(r => r.id === id);
+                        if (ret) {
+                            if (ret.addedStockBack) {
+                                for (const item of ret.items) {
+                                    const product = state.products.find(p => p.id === item.productId);
+                                    if (product) {
+                                        product.stock -= item.qty;
+                                        await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                                    }
+                                }
+                            }
+                            state.returns = state.returns.filter(r => r.id !== id);
+                            await supabaseClient.from('returns').delete().eq('id', id);
+                            showToast('Data retur berhasil dihapus.');
+                        }
+                    });
+                };
+
+                // === LOGIKA PESANAN MASUK (SINKRONISASI CLOUD AMAN & FILTER STATUS) ===
+                const sortedIncomingOrders = computed(() => {
+                    if (!state.incoming_orders) return [];
+                    let orders = [...state.incoming_orders];
+                    
+                    // REVISI: Logika filter status Pesanan Masuk
+                    if (incomingOrderStatusFilter.value !== 'all') {
+                        orders = orders.filter(o => o.status === incomingOrderStatusFilter.value);
+                    }
+                    
+                    return orders.sort((a, b) => new Date(b.date) - new Date(a.date));
+                });
+
+                const openIncomingOrderModal = () => {
+                    modals.incoming_order.data = { productName: '', status: 'Cetak' };
+                    modals.incoming_order.show = true;
+                };
+
+                const saveIncomingOrder = async () => {
+                    const newOrder = {
+                        id: 'ORD-' + Date.now(),
+                        date: new Date().toISOString(),
+                        productName: modals.incoming_order.data.productName,
+                        status: modals.incoming_order.data.status
+                    };
+                    if (!state.incoming_orders) state.incoming_orders = [];
+                    state.incoming_orders.push(newOrder);
+
+                    // Mencoba menyimpan dengan format standar snake_case ke Supabase
+                    const { error } = await supabaseClient.from('incoming_orders').insert([{
+                        id: newOrder.id,
+                        date: newOrder.date,
+                        product_name: newOrder.productName,
+                        status: newOrder.status
+                    }]);
+
+                    if (error) {
+                        console.warn("Mencoba fallback menyimpan incoming_orders dalam format CamelCase...", error);
+                        // Fallback ke format camelCase
+                        const { error: fallbackError } = await supabaseClient.from('incoming_orders').insert([newOrder]);
+                        if (fallbackError) {
+                            console.error("Gagal menyimpan pesanan masuk ke Supabase:", fallbackError);
+                            showToast('Gagal mencatat pesanan masuk ke database cloud!', 'error');
+                        } else {
+                            showToast('Pesanan masuk berhasil ditambahkan');
+                        }
+                    } else {
+                        showToast('Pesanan masuk berhasil ditambahkan');
+                    }
+                    modals.incoming_order.show = false;
+                };
+
+                const updateIncomingOrderStatus = async (id, status) => {
+                    const index = state.incoming_orders.findIndex(o => o.id === id);
+                    if (index !== -1) {
+                        state.incoming_orders[index].status = status;
+                        const { error } = await supabaseClient.from('incoming_orders').update({ status: status }).eq('id', id);
+                        if (error) {
+                            console.error("Gagal merubah status pesanan di cloud:", error);
+                            showToast('Gagal merubah status di database cloud!', 'error');
+                        } else {
+                            showToast(`Status pesanan berhasil diubah ke ${status}`);
+                        }
+                    }
+                };
+
+                const deleteIncomingOrder = (id) => {
+                    triggerConfirm('Hapus Pesanan Masuk', 'Apakah Anda yakin ingin menghapus catatan pesanan masuk ini?', async () => {
+                        state.incoming_orders = state.incoming_orders.filter(o => o.id !== id);
+                        await supabaseClient.from('incoming_orders').delete().eq('id', id);
+                        showToast('Pesanan masuk berhasil dihapus');
+                    });
+                };
+
+                // === LOGIKA BARANG MASUK (SINKRONISASI CLOUD AMAN, REALISASI STOK, & FILTER STATUS) ===
+                const sortedIncomingGoods = computed(() => {
+                    if (!state.incoming_goods) return [];
+                    let goods = [...state.incoming_goods];
+                    
+                    // REVISI: Logika filter status Barang Masuk
+                    if (incomingGoodsStatusFilter.value !== 'all') {
+                        goods = goods.filter(g => g.status === incomingGoodsStatusFilter.value);
+                    }
+                    
+                    return goods.sort((a, b) => new Date(b.date) - new Date(a.date));
+                });
+
+                const openIncomingGoodsModal = () => {
+                    modals.incoming_goods.data = { productName: '', brand: '', qty: 1, status: 'Dalam Pengiriman' };
+                    modals.incoming_goods.show = true;
+                };
+
+                const saveIncomingGoods = async () => {
+                    const status = modals.incoming_goods.data.status;
+                    const productName = modals.incoming_goods.data.productName;
+                    const qty = parseInt(modals.incoming_goods.data.qty) || 1;
+                    let stockAdded = false;
+
+                    // Logika: Jika barang masuk dengan status langsung "Sampai", stok akan langsung bertambah
+                    if (status === 'Sampai') {
+                        const product = state.products.find(p => p.name.toLowerCase().trim() === productName.toLowerCase().trim());
+                        if (product) {
+                            product.stock += qty;
+                            await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                            stockAdded = true;
+                            showToast(`Stok ${product.name} otomatis bertambah +${qty} Pcs karena status 'Sampai'.`);
+                        } else {
+                            showToast(`Info: Produk '${productName}' tidak ditemukan di Manajemen Stok. Stok tidak otomatis bertambah.`, 'error');
+                        }
+                    }
+
+                    const newGoods = {
+                        id: 'IGD-' + Date.now(),
+                        date: new Date().toISOString(),
+                        productName: productName,
+                        brand: modals.incoming_goods.data.brand || '',
+                        qty: qty,
+                        status: status,
+                        stock_added: stockAdded
+                    };
+
+                    if (!state.incoming_goods) state.incoming_goods = [];
+                    state.incoming_goods.push(newGoods);
+
+                    // Mencoba menyimpan dengan format snake_case ke database Supabase
+                    const dbGoodsSnake = {
+                        id: newGoods.id,
+                        date: newGoods.date,
+                        product_name: productName,
+                        brand: newGoods.brand,
+                        qty: qty,
+                        status: status,
+                        stock_added: stockAdded
+                    };
+
+                    const { error } = await supabaseClient.from('incoming_goods').insert([dbGoodsSnake]);
+                    if (error) {
+                        console.warn("Format snake_case gagal, mencoba fallback ke format CamelCase untuk incoming_goods...", error);
+                        // Fallback ke format camelCase jika skema kolom tabel Supabase Anda menggunakan camelCase
+                        const { error: fallbackError } = await supabaseClient.from('incoming_goods').insert([{
+                            id: newGoods.id,
+                            date: newGoods.date,
+                            productName: productName,
+                            brand: newGoods.brand,
+                            qty: qty,
+                            status: status,
+                            stockAdded: stockAdded
+                        }]);
+                        if (fallbackError) {
+                            console.error("Gagal menyimpan barang masuk ke database cloud Supabase:", fallbackError);
+                            showToast('Gagal mencatat barang masuk ke Cloud!', 'error');
+                        } else {
+                            showToast('Barang masuk berhasil dicatat ke Cloud');
+                        }
+                    } else {
+                        showToast('Barang masuk berhasil dicatat ke Cloud');
+                    }
+                    modals.incoming_goods.show = false;
+                };
+
+                const updateIncomingGoodsStatus = async (id, status) => {
+                    const index = state.incoming_goods.findIndex(g => g.id === id);
+                    if (index !== -1) {
+                        const goods = state.incoming_goods[index];
+                        const qty = parseInt(goods.qty) || 1;
+
+                        // Logika: Jika diubah ke status "Sampai" dan sebelumnya stoknya belum ditambahkan
+                        if (status === 'Sampai' && !goods.stock_added) {
+                            const product = state.products.find(p => p.name.toLowerCase().trim() === goods.productName.toLowerCase().trim());
+                            if (product) {
+                                product.stock += qty;
+                                await supabaseClient.from('products').update({ stock: product.stock }).eq('id', product.id);
+                                goods.stock_added = true;
+                                showToast(`Stok produk ${product.name} bertambah +${qty} Pcs secara real-time!`);
+                            } else {
+                                showToast(`Peringatan: Produk '${goods.productName}' tidak ditemukan di Manajemen Stok.`, 'error');
+                            }
+                        }
+
+                        goods.status = status;
+
+                        // Simpan pembaruan status ke database Supabase dengan format snake_case
+                        const { error } = await supabaseClient.from('incoming_goods').update({ 
+                            status: status, 
+                            stock_added: goods.stock_added 
+                        }).eq('id', id);
+
+                        if (error) {
+                            console.warn("Gagal update dengan snake_case, mencoba format CamelCase...", error);
+                            // Fallback jika database menggunakan format camelCase
+                            const { error: fallbackError } = await supabaseClient.from('incoming_goods').update({ 
+                                status: status, 
+                                stockAdded: goods.stock_added 
+                        }).eq('id', id);
+                            if (fallbackError) {
+                                console.error("Gagal menyimpan pembaruan status ke database:", fallbackError);
+                                showToast('Gagal merubah status di database cloud!', 'error');
+                            } else {
+                                showToast(`Status barang berhasil diubah ke ${status}`);
+                            }
+                        } else {
+                            showToast(`Status barang berhasil diubah ke ${status}`);
+                        }
+                    }
+                };
+
+                const deleteIncomingGoods = (id) => {
+                    triggerConfirm('Hapus Barang Masuk', 'Apakah Anda yakin ingin menghapus catatan barang masuk ini?', async () => {
+                        state.incoming_goods = state.incoming_goods.filter(g => g.id !== id);
+                        await supabaseClient.from('incoming_goods').delete().eq('id', id);
+                        showToast('Barang masuk berhasil dihapus');
+                    });
+                };
+
+                // Backup JSON
+                const getBackupDataObj = () => JSON.stringify({ 
+                    products: state.products, 
+                    sales: state.sales, 
+                    expenses: state.expenses, 
+                    returns: state.returns,
+                    incoming_orders: state.incoming_orders || [],
+                    incoming_goods: state.incoming_goods || [],
+                    atm_logs: state.atm_logs || [] // REVISI: Cadangkan log saldo ATM
+                }, null, 2);
+
+                const confirmReset = () => {
+                    triggerConfirm('Reset Aplikasi', 'Apakah Anda yakin ingin menghapus SEMUA data di Server Supabase?', async () => {
+                        state.products = [];
+                        state.sales = [];
+                        state.expenses = [];
+                        state.returns = [];
+                        state.cart = [];
+                        state.incoming_orders = [];
+                        state.incoming_goods = [];
+                        state.atm_logs = [];
+                        atmBalance.value = 0;
+                        
+                        await supabaseClient.from('products').delete().neq('id', '0');
+                        await supabaseClient.from('sales').delete().neq('id', '0');
+                        await supabaseClient.from('expenses').delete().neq('id', '0');
+                        await supabaseClient.from('returns').delete().neq('id', '0');
+                        await supabaseClient.from('incoming_orders').delete().neq('id', '0');
+                        await supabaseClient.from('incoming_goods').delete().neq('id', '0');
+                        await saveSettingToSupabase('atm_balance', '0');
+                        await saveSettingToSupabase('atm_logs', JSON.stringify([]));
+                        
+                        showToast('Semua data di server cloud berhasil direset.');
+                    });
+                };
+
+                const downloadData = () => {
+                    const dataStr = getBackupDataObj();
+                    const blob = new Blob([dataStr], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Caselab_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast('File backup berhasil diunduh!');
+                };
+
+                // Import Data dari Backup JSON
+                const triggerBackupImport = () => { if (backupFileInput.value) backupFileInput.value.click(); };
+                
+                const handleBackupImport = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const importedData = JSON.parse(e.target.result);
+                            
+                            triggerConfirm('Import Data', 'Data dari file backup akan ditambahkan ke server Supabase. Lanjutkan?', async () => {
+                                try {
+                                    // Upsert (Insert or Update berdasarkan ID) ke Supabase
+                                    if (importedData.products && importedData.products.length > 0) {
+                                        await supabaseClient.from('products').upsert(importedData.products);
+                                    }
+                                    if (importedData.sales && importedData.sales.length > 0) {
+                                        await supabaseClient.from('sales').upsert(importedData.sales);
+                                    }
+                                    if (importedData.expenses && importedData.expenses.length > 0) {
+                                        await supabaseClient.from('expenses').upsert(importedData.expenses);
+                                    }
+                                    if (importedData.returns && importedData.returns.length > 0) {
+                                        await supabaseClient.from('returns').upsert(importedData.returns);
+                                    }
+                                    if (importedData.incoming_orders && importedData.incoming_orders.length > 0) {
+                                        // Melakukan normalisasi data yang di-import agar cocok dengan struktur tabel
+                                        const mappedIncomingOrders = importedData.incoming_orders.map(o => ({
+                                            id: o.id,
+                                            date: o.date,
+                                            product_name: o.productName || o.product_name,
+                                            status: o.status
+                                        }));
+                                        await supabaseClient.from('incoming_orders').upsert(mappedIncomingOrders);
+                                    }
+                                    if (importedData.incoming_goods && importedData.incoming_goods.length > 0) {
+                                        // Melakukan normalisasi data yang di-import agar cocok dengan struktur tabel
+                                        const mappedIncomingGoods = importedData.incoming_goods.map(g => ({
+                                            id: g.id,
+                                            date: g.date,
+                                            product_name: g.productName || g.product_name,
+                                            brand: g.brand,
+                                            qty: g.qty,
+                                            status: g.status,
+                                            stock_added: g.stock_added !== undefined ? g.stock_added : g.stockAdded
+                                        }));
+                                        await supabaseClient.from('incoming_goods').upsert(mappedIncomingGoods);
+                                    }
+                                    // REVISI: Pulihkan log ATM dari data import jika ada
+                                    if (importedData.atm_logs) {
+                                        state.atm_logs = importedData.atm_logs;
+                                        await saveSettingToSupabase('atm_logs', JSON.stringify(state.atm_logs));
+                                    }
+                                    
+                                    // Refresh data pada UI
+                                    await loadAllDataFromSupabase();
+                                    showToast('Proses import backup berhasil diselesaikan!');
+                                } catch (err) {
+                                    console.error('Error saat sinkronisasi import', err);
+                                    showToast('Gagal menyinkronkan data import ke server.', 'error');
+                                }
+                            });
+                        } catch (error) {
+                            console.error(error);
+                            showToast('Gagal memproses file. Pastikan file backup valid.', 'error');
+                        }
+                        event.target.value = ''; // Reset input file
+                    };
+                    reader.readAsText(file);
+                };
+
+                // REVISI: Computed properties untuk pencarian autocomplete Barang Masuk & Pesanan Masuk
+                const filteredIncomingOrderProducts = computed(() => {
+                    const query = (modals.incoming_order.data.productName || '').toLowerCase();
+                    if (!query) return state.products;
+                    return state.products.filter(p => 
+                        p.name.toLowerCase().includes(query) || 
+                        (p.brand && p.brand.toLowerCase().includes(query))
+                    );
+                });
+
+                const selectIncomingOrderProduct = (p) => {
+                    modals.incoming_order.data.productName = p.name;
+                    showIncomingOrderDropdown.value = false;
+                };
+
+                const filteredIncomingGoodsProducts = computed(() => {
+                    const query = (modals.incoming_goods.data.productName || '').toLowerCase();
+                    if (!query) return state.products;
+                    return state.products.filter(p => 
+                        p.name.toLowerCase().includes(query) || 
+                        (p.brand && p.brand.toLowerCase().includes(query))
+                    );
+                });
+
+                const selectIncomingGoodsProduct = (p) => {
+                    modals.incoming_goods.data.productName = p.name;
+                    // Auto-fill brand dari info stok produk jika ada
+                    if (p.brand) {
+                        modals.incoming_goods.data.brand = p.brand;
+                    }
+                    showIncomingGoodsDropdown.value = false;
+                };
+
+                // === REVISI LOGIKA ATUR SALDO ATM MANUAL (TAMBAH / KURANG / ATUR DENGAN KETERANGAN) ===
+                const openAtmModal = (mode = 'set') => {
+                    modals.atm.mode = mode;
+                    modals.atm.data.description = ''; // Reset keterangan
+                    if (mode === 'set') {
+                        modals.atm.data.balance = atmBalance.value;
+                        modals.atm.data.description = 'Atur ulang saldo awal ATM';
+                    } else {
+                        modals.atm.data.balance = 0; // Mulai dari nol untuk nominal penambahan / pengurangan
+                    }
+                    modals.atm.show = true;
+                };
+
+                const saveAtmBalance = async () => {
+                    const amount = parseFloat(modals.atm.data.balance) || 0;
+                    const desc = modals.atm.data.description ? modals.atm.data.description.trim() : '';
+                    let logType = 'Atur';
+                    
+                    if (modals.atm.mode === 'add') {
+                        atmBalance.value += amount;
+                        logType = 'Tambah';
+                        showToast(`Berhasil menambah saldo ATM sebesar ${formatCurrency(amount)}`);
+                    } else if (modals.atm.mode === 'subtract') {
+                        if (amount > atmBalance.value) {
+                            showToast("Nominal pengurangan melebihi sisa saldo ATM saat ini!", "error");
+                            return;
+                        }
+                        atmBalance.value -= amount;
+                        logType = 'Kurang';
+                        showToast(`Berhasil mengurangi saldo ATM sebesar ${formatCurrency(amount)}`);
+                    } else {
+                        atmBalance.value = amount;
+                        logType = 'Atur';
+                        showToast('Saldo ATM berhasil diatur ulang');
+                    }
+
+                    // Tambahkan entri laporan keluar masuk baru ke state
+                    const newLog = {
+                        id: 'ATM-' + Date.now(),
+                        date: new Date().toISOString(),
+                        type: logType,
+                        amount: amount,
+                        description: desc || (logType === 'Tambah' ? 'Manual Tambah Saldo' : logType === 'Kurang' ? 'Manual Kurangi Saldo' : 'Manual Atur Ulang Saldo')
+                    };
+                    if (!state.atm_logs) state.atm_logs = [];
+                    state.atm_logs.push(newLog);
+
+                    // Menyimpan saldo ATM terbaru ke Supabase cloud
+                    await saveSettingToSupabase('atm_balance', atmBalance.value.toString());
+                    // Menyimpan logs keluar masuk ATM ke Supabase cloud
+                    await saveSettingToSupabase('atm_logs', JSON.stringify(state.atm_logs));
+
+                    modals.atm.show = false;
+                };
+
+                // Riwayat Logs Terurut (Terbaru di Atas)
+                const sortedAtmLogs = computed(() => {
+                    if (!state.atm_logs) return [];
+                    return [...state.atm_logs].sort((a, b) => new Date(b.date) - new Date(a.date));
+                });
+
+                // Hapus Semua Riwayat Transaksi Saldo ATM
+                const clearAtmLogs = () => {
+                    triggerConfirm('Hapus Riwayat ATM', 'Apakah Anda yakin ingin menghapus seluruh riwayat mutasi keluar masuk saldo ATM ini?', async () => {
+                        state.atm_logs = [];
+                        await saveSettingToSupabase('atm_logs', JSON.stringify([]));
+                        showToast('Riwayat keluar masuk saldo ATM berhasil dihapus.');
+                    });
+                };
+
+                return {
+                    isLoggedIn, loginForm, loginError, handleLogin, handleLogout,
+                    activeTab, isSidebarOpen, changeTab, toasts, state,
+                    formatCurrency, formatDate, totalRevenue, totalExpenses, totalHpp, totalReturnCosts, netProfit, 
+                    recentSales, sortedExpenses, sortedReturns, getProductName,
+                    modals, openProductModal, saveProduct, deleteProduct, openExpenseModal, saveExpense, deleteExpense,
+                    cartForm, checkoutForm, cartTotal, addToCart, removeFromCart, processCheckout, deleteSale,
+                    openReturnModal, addReturnItem, removeReturnItem, saveReturn, deleteReturn, timeFilter,
+                    stockSearch, stockBrandFilter, stockQtyFilter, brands, filteredProducts,
+                    salesSearchQuery, showSalesDropdown, filteredSalesProducts, selectSalesProduct, clearSalesSelection,
+                    getFilteredReturnProducts, selectReturnProduct, productSalesAnalysis, 
+                    excelFileInput, triggerExcelImport, handleExcelImport,
+                    confirmModal, triggerConfirm, confirmReset,
+                    fileInput, downloadData,
+                    backupFileInput, triggerBackupImport, handleBackupImport,
+                    
+                    // Export Fitur Baru untuk Vue Bindings
+                    sortedIncomingOrders, openIncomingOrderModal, saveIncomingOrder, updateIncomingOrderStatus, deleteIncomingOrder, getProductStockByName,
+                    sortedIncomingGoods, openIncomingGoodsModal, saveIncomingGoods, updateIncomingGoodsStatus, deleteIncomingGoods,
+
+                    // REVISI: Bindings baru untuk cari & pilih produk real-time
+                    showIncomingOrderDropdown, showIncomingGoodsDropdown,
+                    filteredIncomingOrderProducts, selectIncomingOrderProduct,
+                    filteredIncomingGoodsProducts, selectIncomingGoodsProduct,
+
+                    // REVISI: Filter Status Pesanan & Barang Masuk
+                    incomingOrderStatusFilter, incomingGoodsStatusFilter,
+
+                    // Fitur PDF Export
+                    exportToPDF,
+
+                    // REVISI: Binding baru untuk Kustom Tanggal Periode, Saldo ATM & Log Laporan ATM
+                    customStartDate, customEndDate, atmBalance, openAtmModal, saveAtmBalance, sortedAtmLogs, clearAtmLogs
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
